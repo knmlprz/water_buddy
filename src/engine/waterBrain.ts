@@ -33,18 +33,22 @@ export interface ParcelDiagnosisInput {
   satelliteAgeDays: number | null;
   depletionFraction: number; // 0.0 - 1.0 aktualny stopień wyczerpania zapasu wody w strefie korzeni
   dryYearsLast10: number; // ile lat z ostatnich 10 było suchych
+  // false = nie udało się pobrać pogody; wskaźniki pogodowe są wtedy nieznane, a nie zerowe
+  meteoAvailable?: boolean;
 }
 
 export interface DiagnosedCause {
   domena: 'Opad i upał' | 'Słaba retencja gleby' | 'Spływ powierzchniowy' | 'Wrażliwa uprawa';
   aktywna: boolean;
   nasilenie: 'Wysokie' | 'Umiarkowane' | 'Brak';
+  nieoceniono?: boolean; // brak danych do oceny czynnika (nie mylić z "bez problemu")
   dowod: string;
   zrodlo: string;
 }
 
 export interface IrrigationCalculation {
   uzasadnione: boolean;
+  ocena_mozliwa?: boolean; // false = brak danych pogodowych, potrzeby nawadniania nie oceniono
   powod_decyzji: string;
   taw_mm: number; // Całkowita woda dostępna w efektywnej strefie korzeni
   raw_mm: number; // Woda łatwo dostępna (p * TAW)
@@ -78,6 +82,7 @@ export interface ParcelDiagnosisResult {
   crop: CropParameter;
   soil: SoilWaterGroup;
   edoLevel: EdoLadderLevel;
+  meteoAvailable: boolean;
   waterManagement: WaterManagementAssessment;
   ndviClass: NdviClass | null;
   inCriticalWindow: boolean;
@@ -176,6 +181,22 @@ export function calculateIrrigationDose(
     };
   }
 
+  if (input.meteoAvailable === false) {
+    return {
+      uzasadnione: false,
+      ocena_mozliwa: false,
+      powod_decyzji:
+        'Nie można ocenić potrzeby nawadniania: brak danych pogodowych do policzenia bilansu wody w glebie.',
+      taw_mm: tawMm,
+      raw_mm: rawMm,
+      aktualny_deficyt_mm: 0,
+      dawka_maksymalna_mm: 0,
+      dawka_zalecana_mm: 0,
+      dopuszczalne_wyczerpanie_pct: Math.round(crop.dopuszczalne_wyczerpanie_p * 100),
+      zrodlo: 'CDR 2025 (s. 243–252), FAO-56'
+    };
+  }
+
   const triggered =
     inCriticalWindow &&
     clampedDepletion >= crop.dopuszczalne_wyczerpanie_p &&
@@ -231,6 +252,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
 
   const satelliteAvailable =
     input.ndvi !== null && input.satelliteAgeDays !== null && input.satelliteAgeDays <= 14;
+  const meteoAvailable = input.meteoAvailable !== false;
 
   const { level: edoLevel, harvestFalseAlarmGuarded } = evaluateEdoLadder({
     spi1: input.spi1,
@@ -288,16 +310,28 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     (inCriticalWindow ||
       (seasonPhase === 'odbudowa_jesien_zima' && (input.dryYearsLast10 >= 4 || !input.hasSoilCover)));
 
+  const weatherCause: DiagnosedCause = meteoAvailable
+    ? {
+        domena: 'Opad i upał',
+        aktywna: weatherHigh || weatherMod,
+        nasilenie: weatherHigh ? 'Wysokie' : weatherMod ? 'Umiarkowane' : 'Brak',
+        dowod: hasExcessWaterRisk
+          ? `Przewaga opadów (KBW +${input.kbwMm} mm) przy glebie zwięzłej lub zagłębieniu (ryzyko zastoin), a w ${input.dryYearsLast10}/10 ostatnich lat w sezonie było sucho.`
+          : `KBW 60 dni = ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm, SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.`,
+        zrodlo: 'Open-Meteo Archive (ERA5 / FAO ET0), CDR 2025 s. 66, POLSA tab. 6.4'
+      }
+    : {
+        domena: 'Opad i upał',
+        aktywna: false,
+        nasilenie: 'Brak',
+        nieoceniono: true,
+        dowod:
+          'Nie udało się pobrać danych pogodowych, więc nie oceniamy opadów, parowania ani historii susz z 10 lat.',
+        zrodlo: 'Open-Meteo Archive (ERA5 / FAO ET0) — niedostępne'
+      };
+
   const causes: DiagnosedCause[] = [
-    {
-      domena: 'Opad i upał',
-      aktywna: weatherHigh || weatherMod,
-      nasilenie: weatherHigh ? 'Wysokie' : weatherMod ? 'Umiarkowane' : 'Brak',
-      dowod: hasExcessWaterRisk
-        ? `Przewaga opadów (KBW +${input.kbwMm} mm) przy glebie zwięzłej lub zagłębieniu (ryzyko zastoin), a w ${input.dryYearsLast10}/10 ostatnich lat w sezonie było sucho.`
-        : `KBW 60 dni = ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm, SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.`,
-      zrodlo: 'Open-Meteo Archive (ERA5 / FAO ET0), CDR 2025 s. 66, POLSA tab. 6.4'
-    },
+    weatherCause,
     {
       domena: 'Słaba retencja gleby',
       aktywna: soil.woda_dostepna_50cm_mm <= 90,
@@ -416,7 +450,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     edoLevel.poziom
   );
 
-  if (input.landUse === 'arable') {
+  if (input.landUse === 'arable' && meteoAvailable) {
     if (irrigationCalc.uzasadnione) {
       matchedIds.add('R13_NAWADNIANIE_OPCJONALNE_WYCZERPANIE_RAW');
     } else {
@@ -535,6 +569,10 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     wmLevel = 'poza_rolnictwem';
     wmHeadline = 'Działka poza gruntami rolnymi';
     wmSummary = `Wskazana działka (${input.parcelLabel}) nie jest polem uprawnym, dlatego nie wydajemy zaleceń polowych.`;
+  } else if (!meteoAvailable) {
+    wmLevel = riskScore >= 34 ? 'podwyzszone_ryzyko' : 'wymaga_uwagi';
+    wmHeadline = 'Ocena niepełna — brak danych pogodowych';
+    wmSummary = `Na dzień ${input.analysisDate} nie udało się pobrać danych pogodowych, więc nie oceniamy bieżącej suszy ani potrzeby nawadniania. Poniższe wskazówki wynikają wyłącznie z gleby, ukształtowania terenu, sieci rowów i zdjęć satelitarnych. Spróbuj ponownie później, aby otrzymać pełny raport.`;
   } else if (riskScore >= 55 || edoLevel.poziom === 'alarm') {
     wmLevel = 'krytyczna';
     wmHeadline =
@@ -582,6 +620,8 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
   let statusSummaryPl = '';
   if (input.landUse !== 'arable') {
     statusSummaryPl = `Działka ${input.parcelLabel} nie jest gruntem ornym — przerwano generowanie rekomendacji polowych.`;
+  } else if (!meteoAvailable) {
+    statusSummaryPl = wmSummary;
   } else if (edoLevel.poziom === 'alarm') {
     statusSummaryPl = `Na dzień ${input.analysisDate} stwierdzono poziom ALARM: łączny niedobór opadu, spadek wilgotności gleby (SMA ${input.sma.toFixed(1)}) i stres roślin potwierdzony satelitarnie.`;
   } else if (edoLevel.poziom === 'ostrzezenie') {
@@ -598,6 +638,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     crop,
     soil,
     edoLevel,
+    meteoAvailable,
     waterManagement,
     ndviClass,
     inCriticalWindow,

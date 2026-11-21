@@ -254,3 +254,26 @@ test('All public/data reference files exist and match runtime exports loaded by 
   assert.ok(rulesJson.length >= 20);
   assert.ok(limitationsJson.length >= 10);
 });
+
+test('Missing weather data is reported as "not assessed", never as "no drought" or "no irrigation need"', () => {
+  const result = runWaterDiagnosis({
+    ...baseInput,
+    analysisDate: '2025-07-10',
+    kbwMm: 0,
+    spi1: 0,
+    spi3: 0,
+    sma: 0,
+    depletionFraction: 0,
+    dryYearsLast10: 0,
+    meteoAvailable: false
+  });
+
+  assert.equal(result.meteoAvailable, false);
+  const weather = result.causes.find((c) => c.domena === 'Opad i upał');
+  assert.equal(weather?.nieoceniono, true);
+  assert.equal(result.irrigationCalc.ocena_mozliwa, false);
+  assert.equal(result.irrigationCalc.uzasadnione, false);
+  assert.equal(result.irrigationRules.length, 0);
+  assert.match(result.waterManagement.headlinePl, /brak danych pogodowych/);
+  assert.match(result.statusSummaryPl, /nie udało się pobrać danych pogodowych/);
+});

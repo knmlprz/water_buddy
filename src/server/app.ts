@@ -18,6 +18,13 @@ import {
   sanitizeCropId,
   sanitizeParcelIdStrict
 } from './analyzeService';
+import {
+  buildUldkByIdUrl,
+  buildUldkByXyUrl,
+  fetchUldkParcel,
+  parseUldkResponse,
+  type UldkParcelRecord
+} from './uldk';
 
 interface ProbeConfig {
   id: string;
@@ -70,12 +77,13 @@ const PROBE_CONFIGS: Record<string, ProbeConfig> = {
       url: `https://uldk.gugik.gov.pl/?request=GetParcelByXY&xy=${lon.toFixed(4)},${lat.toFixed(4)},4326&result=id,voivodeship,county,commune,region,parcel,geom_wkt&srid=4326`
     }),
     summarize: (text) => {
-      const lines = text.trim().split('\n');
-      if (lines[0]?.trim() === '0' && lines[1]) {
-        const parts = lines[1].split('|');
-        return `Znaleziono działkę ${parts[0] ?? ''} (${parts[1] ?? ''}, ${parts[3] ?? ''})`;
+      try {
+        const record = parseUldkResponse(text);
+        if (!record) return 'Odpowiedź ULDK: brak działki w tym punkcie';
+        return `Znaleziono działkę ${record.id} (${record.voivodeship}, ${record.commune})`;
+      } catch {
+        return 'Odpowiedź ULDK niepoprawna (możliwe ograniczenie ruchu GUGiK)';
       }
-      return `Odpowiedź ULDK: ${lines[0] ?? 'brak danych'}`;
     }
   },
   open_meteo: {
@@ -300,6 +308,8 @@ export function createApiApp(): express.Express {
           ...(built.headers ?? {})
         },
         body: built.body,
+        // ULDK przy ograniczeniu ruchu przekierowuje na ~130 MB śmieci — nie podążamy za tym
+        redirect: config.id === 'uldk' ? 'manual' : 'follow',
         signal: AbortSignal.timeout(8500)
       });
 
@@ -343,14 +353,14 @@ export function createApiApp(): express.Express {
     const totalStart = Date.now();
 
     try {
-      const uldkUrl =
-        mode === 'id'
-          ? `https://uldk.gugik.gov.pl/?request=GetParcelById&id=${encodeURIComponent(parcelId)}&result=id,voivodeship,county,commune,region,parcel,geom_wkt&srid=4326`
-          : `https://uldk.gugik.gov.pl/?request=GetParcelByXY&xy=${lon.toFixed(5)},${lat.toFixed(5)},4326&result=id,voivodeship,county,commune,region,parcel,geom_wkt&srid=4326`;
+      const uldkUrl = mode === 'id' ? buildUldkByIdUrl(parcelId) : buildUldkByXyUrl(lat, lon);
 
-      const uldkRes = await fetch(uldkUrl, { signal: AbortSignal.timeout(7000) });
-      const uldkText = await uldkRes.text();
-      const uldkLines = uldkText.trim().split('\n');
+      let uldkRecord: UldkParcelRecord | null = null;
+      try {
+        uldkRecord = await fetchUldkParcel(uldkUrl, { timeoutMs: 7000 });
+      } catch {
+        uldkRecord = null;
+      }
 
       let parcelInfo = {
         found: false,
@@ -364,21 +374,20 @@ export function createApiApp(): express.Express {
         centroidLon: lon
       };
 
-      if (uldkLines[0]?.trim() === '0' && uldkLines[1]) {
-        const parts = uldkLines[1].split('|');
+      if (uldkRecord) {
         parcelInfo = {
           found: true,
-          id: parts[0] ?? parcelId,
-          voivodeship: parts[1] ?? '',
-          county: parts[2] ?? '',
-          commune: parts[3] ?? '',
-          region: parts[4] ?? '',
-          parcelNumber: parts[5] ?? '',
+          id: uldkRecord.id,
+          voivodeship: uldkRecord.voivodeship,
+          county: uldkRecord.county,
+          commune: uldkRecord.commune,
+          region: uldkRecord.region,
+          parcelNumber: uldkRecord.parcelNumber,
           centroidLat: lat,
           centroidLon: lon
         };
 
-        const wkt = parts[6] ?? '';
+        const wkt = uldkRecord.wkt;
         const coordMatches = [...wkt.matchAll(/(\d+\.\d+)\s+(\d+\.\d+)/g)];
         if (coordMatches.length > 0) {
           let sumLon = 0;

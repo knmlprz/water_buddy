@@ -478,6 +478,7 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
   const lim08 = LIMITATIONS_DATA.find((l) => l.id === 'LIM_08_NAWADNIANIE_POZWOLENIA');
 
   const { taw_mm, raw_mm, aktualny_deficyt_mm } = result.irrigationCalc;
+  const irrigationAssessed = result.irrigationCalc.ocena_mozliwa !== false;
   const rawPct = taw_mm > 0 ? Math.min(100, Math.round((raw_mm / taw_mm) * 100)) : 50;
   const deficitPct =
     taw_mm > 0 ? Math.min(100, Math.round((aktualny_deficyt_mm / taw_mm) * 100)) : 0;
@@ -610,7 +611,9 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                 <p className="text-xs text-[#55665D]">
                   Bieżący poziom suszy (drabina EDO na dzień {report.analysisDate}):{' '}
                   <strong className="text-[#141D19]">
-                    {getEdoPlainLabel(result.edoLevel.poziom)}
+                    {result.meteoAvailable === false
+                      ? 'Nie oceniono (brak danych pogodowych)'
+                      : getEdoPlainLabel(result.edoLevel.poziom)}
                   </strong>
                 </p>
               )}
@@ -684,8 +687,9 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                   ? 'text-[#B45309]'
                   : 'text-[#6B7A72]';
 
-            const severityLabel =
-              cause.nasilenie === 'Wysokie'
+            const severityLabel = cause.nieoceniono
+              ? 'Nie oceniono (brak danych)'
+              : cause.nasilenie === 'Wysokie'
                 ? 'Silny wpływ'
                 : cause.nasilenie === 'Umiarkowane'
                   ? 'Umiarkowany wpływ'
@@ -811,7 +815,9 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                 <p className="text-sm font-bold text-[#141D19] tabular-nums">
                   {result.irrigationCalc.uzasadnione
                     ? `Można rozważyć podlewanie (ok. ${result.irrigationCalc.dawka_zalecana_mm} mm)`
-                    : 'Nie podlewać teraz — brak pilnej potrzeby nawadniania'}
+                    : irrigationAssessed
+                      ? 'Nie podlewać teraz — brak pilnej potrzeby nawadniania'
+                      : 'Nie oceniono — brak danych pogodowych'}
                 </p>
               </div>
             </div>
@@ -965,12 +971,15 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
               <p className="text-base font-bold tabular-nums">
                 {result.irrigationCalc.uzasadnione
                   ? `TAK — jeśli masz deszczownię, można rozważyć ok. ${result.irrigationCalc.dawka_zalecana_mm} mm wody`
-                  : 'NIE TERAZ — nie ma pilnej potrzeby nawadniania'}
+                  : irrigationAssessed
+                    ? 'NIE TERAZ — nie ma pilnej potrzeby nawadniania'
+                    : 'NIE OCENIONO — brak danych pogodowych'}
               </p>
               <p className="text-sm mt-1 leading-relaxed">{result.irrigationCalc.powod_decyzji}</p>
             </div>
 
-            {/* Reserve bar with plain-Polish explanation */}
+            {/* Reserve bar with plain-Polish explanation (only when the soil water balance was computed) */}
+            {irrigationAssessed && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-[#4A5A52] tabular-nums">
                 <span>
@@ -1005,6 +1014,7 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                 <span>Cały zapas: {taw_mm} mm</span>
               </div>
             </div>
+            )}
 
             {result.irrigationRules[0] && (
               <p className="text-xs sm:text-sm text-[#4A5A52] leading-relaxed">

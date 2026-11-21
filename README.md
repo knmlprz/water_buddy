@@ -39,7 +39,7 @@ NODE_ENV=production npm start
 
 ### Uruchomienie testów jednostkowych
 ```bash
-npx --yes tsx --test src/engine/waterBrain.test.ts src/engine/climateStats.test.ts
+npx --yes tsx --test src/engine/waterBrain.test.ts src/engine/climateStats.test.ts src/server/uldk.test.ts
 ```
 
 ### Uruchomienie w kontenerze Docker
@@ -57,6 +57,7 @@ Wszystkie zmienne środowiskowe są opcjonalne — brak kluczy w kodzie źródł
 - `PORT` (domyślnie `3000`) — port serwera HTTP,
 - `NODE_ENV` (`development` | `production`) — tryb serwera,
 - `APP_URL` — opcjonalny publiczny adres URL wdrożenia,
+- `OPEN_METEO_API_KEY` — opcjonalny klucz płatnego planu Open-Meteo (bez limitu 10 000 zapytań dziennie); bez klucza archiwum pogody jest pobierane raz na komórkę 0,1° i zapisywane w `.cache/meteo` (katalog można zmienić zmienną `METEO_CACHE_DIR`),
 - `GEMINI_API_KEY` — opcjonalny szablon (silnik rekomendacji jest w 100% deterministyczny i nie wymaga LLM).
 
 ---
@@ -254,7 +255,7 @@ Każdy raport zawiera dynamiczną sekcję „O czym warto pamiętać (ograniczen
 
 1. **Automatyczne testy jednostkowe silnika i spójności danych** (`node:test` + `tsx`):
    ```bash
-   npx --yes tsx --test src/engine/waterBrain.test.ts src/engine/climateStats.test.ts
+   npx --yes tsx --test src/engine/waterBrain.test.ts src/engine/climateStats.test.ts src/server/uldk.test.ts
    ```
    Testy weryfikują:
    - obliczenia geometrii poligonu WKT (centroid i powierzchnia),

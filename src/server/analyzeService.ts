@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import proj4 from 'proj4';
 import { fromUrl } from 'geotiff';
 import { CROPS_DATA } from '../data/crops';
@@ -21,6 +24,12 @@ import type {
   ParcelGeometryInfo,
   ProvenanceField
 } from '../types/analysis';
+import {
+  buildUldkByIdUrl,
+  buildUldkByXyUrl,
+  fetchUldkParcel,
+  type UldkParcelRecord
+} from './uldk';
 
 const EPSG_2180 =
   '+proj=tmerc +lat_0=0 +lon_0=19 +k=0.9993 +x_0=500000 +y_0=-5300000 +ellps=GRS80 +units=m +no_defs';
@@ -171,47 +180,37 @@ export async function lookupParcel(params: {
 
   let url: string;
   if (params.id) {
-    url = `https://uldk.gugik.gov.pl/?request=GetParcelById&id=${encodeURIComponent(params.id)}&result=id,voivodeship,county,commune,region,parcel,geom_wkt&srid=4326`;
+    url = buildUldkByIdUrl(params.id);
   } else if (params.lat !== undefined && params.lon !== undefined) {
-    url = `https://uldk.gugik.gov.pl/?request=GetParcelByXY&xy=${params.lon.toFixed(6)},${params.lat.toFixed(6)},4326&result=id,voivodeship,county,commune,region,parcel,geom_wkt&srid=4326`;
+    url = buildUldkByXyUrl(params.lat, params.lon);
   } else {
     throw new ParcelLookupError('INVALID', 'Podaj numer działki TERYT albo wskaż punkt na mapie.');
   }
 
-  let text: string;
+  const uldkUnavailableMsg =
+    'Serwer GUGiK (ULDK) chwilowo nie odpowiada poprawnie. Spróbuj ponownie za kilka minut.';
+
+  let record: UldkParcelRecord | null;
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(7500)
-    });
-    if (!res.ok) {
-      throw new ParcelLookupError('TIMEOUT', 'Serwer GUGiK nie odpowiada, spróbuj ponownie.');
-    }
-    text = await res.text();
-  } catch (err) {
-    if (err instanceof ParcelLookupError) throw err;
-    throw new ParcelLookupError('TIMEOUT', 'Serwer GUGiK nie odpowiada, spróbuj ponownie.');
+    record = await fetchUldkParcel(url, { timeoutMs: 7500, userAgent: USER_AGENT });
+  } catch {
+    throw new ParcelLookupError('TIMEOUT', uldkUnavailableMsg);
   }
 
-  const lines = text.trim().split(/\r?\n/);
-  const statusLine = lines[0]?.trim() ?? '';
-  if (statusLine.startsWith('-1') || statusLine !== '0' || !lines[1]) {
+  if (!record) {
     throw new ParcelLookupError(
       'NOT_FOUND',
       'Nie znaleziono działki o tym numerze. Sprawdź numer albo wskaż ją na mapie.'
     );
   }
 
-  const parts = lines[1].split('|');
-  const id = parts[0]?.trim() || params.id || '';
-  const voivodeship = parts[1]?.trim() || '';
-  const county = parts[2]?.trim() || '';
-  const commune = parts[3]?.trim() || '';
-  const region = parts[4]?.trim() || '';
-  const parcelNumber = parts[5]?.trim() || '';
-  const wkt = parts[6]?.trim() || '';
+  const { id, voivodeship, county, commune, region, parcelNumber, wkt } = record;
 
   const ring = parseWktOuterRing(wkt);
+  // Bez poprawnego obrysu nie liczymy analizy — inaczej dane pochodziłyby z innego miejsca
+  if (ring.length < 3) {
+    throw new ParcelLookupError('TIMEOUT', uldkUnavailableMsg);
+  }
   const geom = computePolygonGeometry(ring);
   const label = `Działka ${parcelNumber || id}${region ? `, obręb ${region}` : ''}${commune ? `, gm. ${commune}` : ''}`;
 
@@ -621,7 +620,135 @@ interface MeteoFetchResult {
   latestDate: string;
   usedForecastSupplement: boolean;
   status: FieldStatus;
+  failureReason: string | null;
   durationMs: number;
+}
+
+// Open-Meteo liczy 1 wywołanie za każde 2 tygodnie danych, więc archiwum 1991→dziś to ~940
+// wywołań z dziennego limitu 10 000. Dlatego archiwum pobieramy raz na komórkę siatki
+// (0,1° ≈ rozdzielczość ERA5-Land) i trzymamy w pamięci oraz na dysku; data analizy
+// tylko przycina dane. Z kluczem OPEN_METEO_API_KEY używamy płatnego endpointu bez limitu.
+interface ArchiveDaily {
+  time: string[];
+  precipitation_sum?: (number | null)[];
+  et0_fao_evapotranspiration?: (number | null)[];
+  temperature_2m_mean?: (number | null)[];
+  soil_moisture_0_to_7cm_mean?: (number | null)[];
+  soil_moisture_7_to_28cm_mean?: (number | null)[];
+}
+
+interface ArchiveCell {
+  fetchedOn: string;
+  endDate: string;
+  daily: ArchiveDaily;
+}
+
+const OPEN_METEO_API_KEY = process.env.OPEN_METEO_API_KEY?.trim() ?? '';
+const METEO_CACHE_DIR =
+  process.env.METEO_CACHE_DIR ??
+  (process.env.VERCEL
+    ? path.join(os.tmpdir(), 'wodapol-meteo')
+    : path.resolve(process.cwd(), '.cache', 'meteo'));
+
+const archiveCellMemory = new Map<string, ArchiveCell>();
+const archiveCellInflight = new Map<string, Promise<ArchiveCell | { error: string }>>();
+
+function openMeteoUrl(kind: 'archive' | 'forecast', query: string): string {
+  const host = kind === 'archive' ? 'archive-api.open-meteo.com' : 'api.open-meteo.com';
+  if (OPEN_METEO_API_KEY) {
+    return `https://customer-${host}/v1/${kind}?${query}&apikey=${encodeURIComponent(OPEN_METEO_API_KEY)}`;
+  }
+  return `https://${host}/v1/${kind}?${query}`;
+}
+
+function archiveCellPath(cellKey: string): string {
+  return path.join(METEO_CACHE_DIR, `${cellKey}.json`);
+}
+
+async function readArchiveCellFromDisk(cellKey: string): Promise<ArchiveCell | null> {
+  try {
+    const raw = await fs.readFile(archiveCellPath(cellKey), 'utf-8');
+    const parsed = JSON.parse(raw) as ArchiveCell;
+    return parsed?.daily?.time?.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeArchiveCellToDisk(cellKey: string, cell: ArchiveCell): Promise<void> {
+  try {
+    await fs.mkdir(METEO_CACHE_DIR, { recursive: true });
+    await fs.writeFile(archiveCellPath(cellKey), JSON.stringify(cell));
+  } catch {
+    // Brak zapisu na dysk (np. system plików tylko do odczytu) — zostaje cache w pamięci
+  }
+}
+
+async function downloadArchiveCell(
+  cellLat: number,
+  cellLon: number,
+  endDate: string,
+  today: string
+): Promise<ArchiveCell | { error: string }> {
+  const query = `latitude=${cellLat.toFixed(1)}&longitude=${cellLon.toFixed(1)}&start_date=1991-01-01&end_date=${endDate}&daily=precipitation_sum,temperature_2m_mean,et0_fao_evapotranspiration,soil_moisture_0_to_7cm_mean,soil_moisture_7_to_28cm_mean&timezone=Europe%2FWarsaw`;
+  try {
+    const res = await fetch(openMeteoUrl('archive', query), {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(15000)
+    });
+    if (res.status === 429) {
+      return { error: 'wyczerpany dzienny limit zapytań Open-Meteo' };
+    }
+    if (!res.ok) {
+      return { error: `Open-Meteo zwróciło błąd ${res.status}` };
+    }
+    const json = (await res.json()) as { daily?: ArchiveDaily };
+    if (!json.daily?.time?.length) {
+      return { error: 'Open-Meteo nie zwróciło danych dziennych' };
+    }
+    return { fetchedOn: today, endDate, daily: json.daily };
+  } catch {
+    return { error: 'Open-Meteo nie odpowiada' };
+  }
+}
+
+async function getArchiveCell(
+  lat: number,
+  lon: number,
+  neededEnd: string,
+  today: string
+): Promise<{ cell: ArchiveCell | null; error: string | null }> {
+  const cellLat = Math.round(lat * 10) / 10;
+  const cellLon = Math.round(lon * 10) / 10;
+  const cellKey = `${cellLat.toFixed(1)}_${cellLon.toFixed(1)}`;
+
+  // Dane historyczne się nie zmieniają: komórka jest dobra, jeśli sięga potrzebnej daty
+  // albo została pobrana dzisiaj (archiwum i tak ma ~5 dni opóźnienia).
+  const isFresh = (c: ArchiveCell) => c.endDate >= neededEnd || c.fetchedOn === today;
+
+  let cell = archiveCellMemory.get(cellKey) ?? null;
+  if (!cell) {
+    cell = await readArchiveCellFromDisk(cellKey);
+    if (cell) archiveCellMemory.set(cellKey, cell);
+  }
+  if (cell && isFresh(cell)) return { cell, error: null };
+
+  let pending = archiveCellInflight.get(cellKey);
+  if (!pending) {
+    pending = downloadArchiveCell(cellLat, cellLon, addDaysIso(today, -5), today);
+    archiveCellInflight.set(cellKey, pending);
+    pending.finally(() => archiveCellInflight.delete(cellKey));
+  }
+  const downloaded = await pending;
+
+  if ('error' in downloaded) {
+    // Starsza kopia jest lepsza niż nic — brakujące ostatnie dni uzupełni prognoza
+    return { cell, error: cell ? null : downloaded.error };
+  }
+
+  archiveCellMemory.set(cellKey, downloaded);
+  await writeArchiveCellToDisk(cellKey, downloaded);
+  return { cell: downloaded, error: null };
 }
 
 async function fetchOpenMeteoHistory(
@@ -637,18 +764,17 @@ async function fetchOpenMeteoHistory(
   const today = getTodayPolandIso();
   const daysFromToday = diffDaysIso(today, analysisDate);
 
-  // Archive lags ~5 days behind today; fetch 1991-01-01 -> min(analysisDate, today-5d)
-  const archiveEnd = daysFromToday <= 6 ? addDaysIso(today, -5) : analysisDate;
-  const archiveUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&start_date=1991-01-01&end_date=${archiveEnd}&daily=precipitation_sum,temperature_2m_mean,et0_fao_evapotranspiration,soil_moisture_0_to_7cm_mean,soil_moisture_7_to_28cm_mean&timezone=Europe%2FWarsaw`;
+  // Archive lags ~5 days behind today; we need data up to min(analysisDate, today-5d)
+  const archiveNeededEnd = daysFromToday <= 6 ? addDaysIso(today, -5) : analysisDate;
 
   const needForecastTail = daysFromToday <= 6;
-  const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&past_days=7&forecast_days=1&daily=precipitation_sum,temperature_2m_mean,et0_fao_evapotranspiration&timezone=Europe%2FWarsaw`;
+  const forecastUrl = openMeteoUrl(
+    'forecast',
+    `latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&past_days=7&forecast_days=1&daily=precipitation_sum,temperature_2m_mean,et0_fao_evapotranspiration&timezone=Europe%2FWarsaw`
+  );
 
   const [archRes, fcRes] = await Promise.allSettled([
-    fetch(archiveUrl, {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(9000)
-    }).then((r) => (r.ok ? r.json() : null)),
+    getArchiveCell(lat, lon, archiveNeededEnd, today),
     needForecastTail
       ? fetch(forecastUrl, {
           headers: { 'User-Agent': USER_AGENT },
@@ -658,16 +784,11 @@ async function fetchOpenMeteoHistory(
   ]);
 
   const byDate = new Map<string, DailyMeteoRecord>();
+  const archiveError =
+    archRes.status === 'fulfilled' ? archRes.value.error : 'Open-Meteo nie odpowiada';
 
-  if (archRes.status === 'fulfilled' && archRes.value?.daily?.time) {
-    const d = archRes.value.daily as {
-      time: string[];
-      precipitation_sum?: (number | null)[];
-      et0_fao_evapotranspiration?: (number | null)[];
-      temperature_2m_mean?: (number | null)[];
-      soil_moisture_0_to_7cm_mean?: (number | null)[];
-      soil_moisture_7_to_28cm_mean?: (number | null)[];
-    };
+  if (archRes.status === 'fulfilled' && archRes.value.cell) {
+    const d = archRes.value.cell.daily;
     for (let i = 0; i < d.time.length; i++) {
       const dt = d.time[i];
       if (dt > analysisDate) continue;
@@ -726,6 +847,8 @@ async function fetchOpenMeteoHistory(
     latestDate,
     usedForecastSupplement,
     status: records.length >= 60 ? 'ok' : 'brak',
+    failureReason:
+      records.length >= 60 ? null : (archiveError ?? 'za mało dni z danymi pogodowymi'),
     durationMs: Date.now() - started
   };
 
@@ -1255,7 +1378,9 @@ export async function runFullParcelAnalysis(
       'Pogoda z 10 lat',
       'Open-Meteo ERA5',
       m.status === 'ok' ? 'ok' : 'fallback',
-      m.status === 'ok' ? `${m.records.length} dni danych do ${m.latestDate}` : 'Brak danych pogodowych',
+      m.status === 'ok'
+        ? `${m.records.length} dni danych do ${m.latestDate}`
+        : `Brak danych pogodowych (${m.failureReason ?? 'nieznany błąd'})`,
       m.durationMs
     );
   });
@@ -1379,7 +1504,8 @@ export async function runFullParcelAnalysis(
     ndviAnomaly: s2.ndviAnomaly,
     satelliteAgeDays: s2.satelliteAgeDays,
     depletionFraction: meteoStats.depletionFraction,
-    dryYearsLast10: meteoStats.dryYearsLast10
+    dryYearsLast10: meteoStats.dryYearsLast10,
+    meteoAvailable: meteo.status === 'ok'
   };
 
   const result = runWaterDiagnosis(rawInput);
@@ -1397,7 +1523,10 @@ export async function runFullParcelAnalysis(
       key: 'kbwMm',
       label: 'KBW (60 dni / 6 dekad)',
       value: meteoStats.kbw60dMm,
-      displayValue: meteo.status === 'ok' ? `${meteoStats.kbw60dMm} mm` : 'brak danych',
+      displayValue:
+        meteo.status === 'ok'
+          ? `${meteoStats.kbw60dMm} mm`
+          : `brak danych (${meteo.failureReason ?? 'nieznany błąd'})`,
       unit: 'mm',
       source: meteo.usedForecastSupplement
         ? 'Open-Meteo ERA5 + Forecast (ostatnie dni)'
@@ -1543,7 +1672,10 @@ export async function runFullParcelAnalysis(
       key: 'depletionFraction',
       label: 'Wyczerpanie zapasu wody w strefie korzeni',
       value: meteoStats.depletionFraction,
-      displayValue: `${Math.round(meteoStats.depletionFraction * 100)}% (próg ${Math.round(crop.dopuszczalne_wyczerpanie_p * 100)}%)`,
+      displayValue:
+        meteo.status === 'ok'
+          ? `${Math.round(meteoStats.depletionFraction * 100)}% (próg ${Math.round(crop.dopuszczalne_wyczerpanie_p * 100)}%)`
+          : 'brak danych',
       source: 'Bilans dzienny FAO-56 / metoda Drupki od 1.03',
       dataDate: meteo.latestDate,
       status: meteo.status

@@ -1,0 +1,6 @@
+id,grupa_uziarnienia,kategoria_iung,ppw_pct_obj,phw_pct_obj,pw_pct_obj,woda_dostepna_50cm_mm,woda_latwo_dostepna_50cm_mm,tempo_przesychania,zrodlo
+piasek_luzny,Piasek luźny,I (bardzo lekka),7,5,5,10,10,Ekstremalnie szybkie (2–4 dni bez opadu w upale wyczerpują zapas),"CDR 2025 (tab. 12, model van Genuchtena); (7,0−5,0)% × 500 mm = 10 mm"
+piasek_gliniasty,Piasek gliniasty,II (lekka),19.4,8.1,5.5,70,57,Szybkie (ok. 10–14 dni bez opadu latem przy ET0 ~4–5 mm/d),"CDR 2025 (tab. 12, model van Genuchtena); (19,4−5,5)% × 500 mm = 69,5 ≈ 70 mm"
+glina_lekka,Glina lekka,III (średnia),24.5,11.9,7.2,87,63,Umiarkowane (ok. 15–18 dni buforowania w warstwie 0–50 cm),"CDR 2025 (tab. 12, model van Genuchtena); (24,5−7,2)% × 500 mm = 86,5 ≈ 87 mm"
+glina_zwykla,Glina zwykła,III (średnia),33,17.8,11.1,110,76,"Powolne, ale podatna na zaskorupianie i podeszwę płużną","CDR 2025 (tab. 12, model van Genuchtena); (33,0−11,1)% × 500 mm = 109,5 ≈ 110 mm"
+pyl_zwykly,Pył zwykły (less),IV (ciężka / pyłowa),41.9,16.3,7.5,172,128,"Bardzo duża pojemność retencyjna (17× większa niż na piasku luźnym), wrażliwa na erozję wodną na stokach","CDR 2025 (tab. 12, model van Genuchtena); (41,9−7,5)% × 500 mm = 172 mm"

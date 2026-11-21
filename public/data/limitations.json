@@ -1,0 +1,82 @@
+[
+  {
+    "id": "LIM_01_SATELITA_CHMURY",
+    "kategoria": "Aktualność danych",
+    "kiedy_stosowac": "Zawsze gdy najnowsza bezchmurna scena Sentinel-2 jest starsza niż 7 dni lub brak sceny.",
+    "warunek_kod": "satelliteAgeDays === null || satelliteAgeDays > 7",
+    "zdanie_do_raportu": "Ze względu na zachmurzenie w rejonie działki ostatni wiarygodny odczyt satelitarny Sentinel-2 (po odfiltrowaniu chmur i cieni maską SCL) nie pochodzi z dnia analizy; stan roślinności mógł ulec zmianie od daty zobrazowania.",
+    "zrodlo_lub_podstawa": "Sentinel-2 L2A (ESA/Copernicus), KOWR pkt 3.3"
+  },
+  {
+    "id": "LIM_02_ROZDZIELCZOSC_PRZESTRZENNA",
+    "kategoria": "Dokładność i rozdzielczość",
+    "kiedy_stosowac": "Zawsze w każdym raporcie (stały element sekcji Ograniczenia).",
+    "warunek_kod": "always",
+    "zdanie_do_raportu": "Raport łączy dane o różnej szczegółowości przestrzennej: granice działki (ULDK) i rzeźbę terenu (NMT ~1 m) z obserwacjami Sentinel-2 (piksel 10–20 m), reanalizą meteorologiczną (Open-Meteo ERA5 ~9–25 km) oraz tłem suszowym EDO (siatka 5 km). Lokalny deszcz burzowy lub zmienność glebowa wewnątrz działki mogą odbiegać od wartości uśrednionych.",
+    "zrodlo_lub_podstawa": "POLSA 2024, Open-Meteo ERA5, Copernicus EDO"
+  },
+  {
+    "id": "LIM_03_DATA_HISTORYCZNA_API",
+    "kategoria": "Aktualność danych",
+    "kiedy_stosowac": "Gdy użytkownik wybierze datę historyczną (starszą niż bieżący sezon).",
+    "warunek_kod": "isHistoricalDate === true",
+    "zdanie_do_raportu": "Dla wybranej daty historycznej wskaźniki pogodowe (Open-Meteo Archive) oraz satelitarne (Earth Search Sentinel-2) zostały odcięte ściśle na dzień analizy bez danych z przyszłości. Warstwy udostępniane wyłącznie w stanie bieżącym (np. aktualne pomiary synoptyczne IMGW lub bieżąca sieć rowów) oznaczono w raporcie osobno.",
+    "zrodlo_lub_podstawa": "KOWR wymaganie analizy „na dzień X”"
+  },
+  {
+    "id": "LIM_04_GLEBA_BEZ_BADAN_LAB",
+    "kategoria": "Dokładność i rozdzielczość",
+    "kiedy_stosowac": "Zawsze gdy grupa glebowa pochodzi z mapy kategorii IUNG lub SoilGrids bez własnej analizy rolnika.",
+    "warunek_kod": "always",
+    "zdanie_do_raportu": "Pojemność wodna gleby (PPW, punkt więdnięcia i zapas wody dostępnej w warstwie 0–50 cm) została oszacowana na podstawie map glebowych (IUNG / SoilGrids) i średnich parametrów modelu van Genuchtena (CDR tab. 12). Rzeczywista retencja działki zależy dodatkowo od zawartości próchnicy, zakwaszenia oraz ewentualnego zagęszczenia warstwy podornej.",
+    "zrodlo_lub_podstawa": "CDR 2025 (tab. 12), IUNG-PIB, ISRIC SoilGrids"
+  },
+  {
+    "id": "LIM_05_BRAK_PROGNOZY_PLONU",
+    "kategoria": "Niepewność modelu",
+    "kiedy_stosowac": "Zawsze w każdym raporcie (ochrona przed pozorną precyzją).",
+    "warunek_kod": "always",
+    "zdanie_do_raportu": "Raport podaje klasy ryzyka oraz przedziały bilansu wodnego i nie szacuje procentowej straty plonu. Przełożenie niedoboru wody na plon wymaga znajomości odmiany, terminu siewu, nawożenia, ochrony roślin oraz ewentualnych uszkodzeń przymrozkowych lub chorobowych.",
+    "zrodlo_lub_podstawa": "KOWR kryterium 2 (Wiarygodność), CDR 2025"
+  },
+  {
+    "id": "LIM_06_CZYNNIKI_NIEUWZGLEDNIONE_AGRO",
+    "kategoria": "Czynniki nieuwzględnione",
+    "kiedy_stosowac": "Zawsze w każdym raporcie.",
+    "warunek_kod": "always",
+    "zdanie_do_raportu": "Analiza nie uwzględnia indywidualnej historii agrotechnicznej pola (przedplonu, terminu i głębokości uprawy, dawek nawozów organicznych i mineralnych), rzeczywistej drożności drenów i rowów melioracyjnych ani aktualnego poziomu wód gruntowych na samej działce.",
+    "zrodlo_lub_podstawa": "KOWR pkt 3.3, CDR 2025"
+  },
+  {
+    "id": "LIM_07_FENOLOGIA_I_ZNIWA",
+    "kategoria": "Niepewność modelu",
+    "kiedy_stosowac": "Gdy data przypada na okres kwitnienia rzepaku, pokosów lucerny lub żniw zbóż.",
+    "warunek_kod": "inHarvestWindow === true || cropId === \"rzepak_ozimy\" || cropId === \"lucerna\"",
+    "zdanie_do_raportu": "Wskaźniki satelitarne (NDVI/NDMI) są wrażliwe na fazę rozwojową i zabiegi agrotechniczne (kwitnienie rzepaku, dojrzewanie zbóż, pokosy traw i lucerny, zbiór). Spadek zieleni w tym terminie może odzwierciedlać naturalny cykl uprawy, a nie stres wodny.",
+    "zrodlo_lub_podstawa": "POLSA 2024 (s. 293)"
+  },
+  {
+    "id": "LIM_08_NAWADNIANIE_POZWOLENIA",
+    "kategoria": "Ograniczenia prawne i decyzje",
+    "kiedy_stosowac": "Gdy raport wyświetla orientacyjną dawkę nawodnieniową.",
+    "warunek_kod": "showIrrigation === true",
+    "zdanie_do_raportu": "Orientacyjna dawka wody z kalkulatora bilansowego (metoda Drupki / FAO-56) ma wyłącznie charakter pomocniczy. Przed uruchomieniem nawadniania należy zweryfikować dostępność i jakość wody, sprawność instalacji oraz wymagania Prawa wodnego (pozwolenie wodnoprawne lub zgłoszenie).",
+    "zrodlo_lub_podstawa": "CDR 2025 (s. 243–252), Prawo wodne"
+  },
+  {
+    "id": "LIM_09_OBS_CHRONIONE_MELIORACJA",
+    "kategoria": "Ograniczenia prawne i decyzje",
+    "kiedy_stosowac": "Gdy raport proponuje działania retencji krajobrazowej (oczka, zastawki, rowy) lub działka leży w Naturze 2000.",
+    "warunek_kod": "hasLandscapeRetention || isNatura2000",
+    "zdanie_do_raportu": "Działania z zakresu małej retencji i melioracji (budowa lub odtworzenie oczka wodnego, piętrzenie wody w rowach) mogą wymagać zgłoszenia wodnoprawnego, uzgodnienia ze spółką wodną lub weryfikacji ograniczeń w obszarach chronionych (m.in. Natura 2000).",
+    "zrodlo_lub_podstawa": "GDOŚ, PGW Wody Polskie, CDR 2025"
+  },
+  {
+    "id": "LIM_10_CHARAKTER_DORADCZY",
+    "kategoria": "Ograniczenia prawne i decyzje",
+    "kiedy_stosowac": "Zawsze jako zdanie zamykające sekcję Ograniczenia.",
+    "warunek_kod": "always",
+    "zdanie_do_raportu": "Przedstawione opcje mają charakter wskazówek doradczych opartych na otwartych danych publicznych i nie zastępują lustracji polowej ani indywidualnej decyzji rolnika oraz lokalnego doradcy rolniczego (ODR).",
+    "zrodlo_lub_podstawa": "Zasady projektowe KOWR i mentorów HackNation 2026"
+  }
+]

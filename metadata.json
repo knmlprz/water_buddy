@@ -1,0 +1,8 @@
+{
+  "name": "Remix WodaPol · Merytoryka i Dane KOWR",
+  "description": "Baza wiedzy agronomicznej (CDR 2025, FAO-56, POLSA, IUNG), silnik reguł rekomendacji wodnych oraz weryfikator otwartych API przestrzennych i meteo dla HackNation 2026.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

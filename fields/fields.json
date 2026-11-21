@@ -1,0 +1,117 @@
+{
+  "location": "okolice Tomaszowa Lubelskiego (gm. Tomaszów Lubelski / Tarnawatka)",
+  "image_bbox": {
+    "lat_min": 50.4105,
+    "lon_min": 23.5175,
+    "lat_max": 50.4315,
+    "lon_max": 23.5465
+  },
+  "images": {
+    "2026-05-25": {
+      "raw": "img/hls_2026-05-25.png",
+      "with_fields": "img/hls_2026-05-25_fields.png"
+    },
+    "2026-06-18": {
+      "raw": "img/hls_2026-06-18.png",
+      "with_fields": "img/hls_2026-06-18_fields.png"
+    },
+    "2026-07-26": {
+      "raw": "img/hls_2026-07-26.png",
+      "with_fields": "img/hls_2026-07-26_fields.png"
+    },
+    "2026-08-05": {
+      "raw": "img/hls_2026-08-05.png",
+      "with_fields": "img/hls_2026-08-05_fields.png"
+    },
+    "season_strip": "img/hls_sezon_2026_fields.png"
+  },
+  "sources": {
+    "terrain": "SRTM 1 arc-second (NASA), api.opentopodata.org",
+    "soil": "SoilGrids 2.0 (ISRIC), 250 m, warstwa 0-30 cm",
+    "imagery": "HLS S30 v2.0 (NASA), NASA GIBS",
+    "runoff": "szacunek: grupa hydrologiczna gleby + klasa spadku"
+  },
+  "fields": {
+    "A": {
+      "centroid": [
+        50.42443,
+        23.53522
+      ],
+      "area_ha": 18.3,
+      "terrain": {
+        "slope_mean_pct": 4.3,
+        "slope_max_pct": 9.6,
+        "elevation_min_m": 293.0,
+        "elevation_max_m": 311.0,
+        "flow_direction": "E",
+        "samples": 205
+      },
+      "soil": {
+        "clay_pct": 22.9,
+        "sand_pct": 16.1,
+        "silt_pct": 61.0,
+        "soc_g_per_kg": 31.6,
+        "texture": {
+          "usda": "silt loam",
+          "label_pl": "pyłowa (lessowa), dobrze trzyma wodę, podatna na erozję",
+          "hydro_group": "B"
+        }
+      },
+      "runoff_estimate": "średni"
+    },
+    "B": {
+      "centroid": [
+        50.42138,
+        23.52869
+      ],
+      "area_ha": 26.6,
+      "terrain": {
+        "slope_mean_pct": 4.2,
+        "slope_max_pct": 8.8,
+        "elevation_min_m": 290.0,
+        "elevation_max_m": 312.0,
+        "flow_direction": "S",
+        "samples": 295
+      },
+      "soil": {
+        "clay_pct": 21.9,
+        "sand_pct": 17.1,
+        "silt_pct": 61.0,
+        "soc_g_per_kg": 31.4,
+        "texture": {
+          "usda": "silt loam",
+          "label_pl": "pyłowa (lessowa), dobrze trzyma wodę, podatna na erozję",
+          "hydro_group": "B"
+        }
+      },
+      "runoff_estimate": "średni"
+    },
+    "C": {
+      "centroid": [
+        50.41837,
+        23.53568
+      ],
+      "area_ha": 38.0,
+      "terrain": {
+        "slope_mean_pct": 5.2,
+        "slope_max_pct": 13.3,
+        "elevation_min_m": 268.0,
+        "elevation_max_m": 293.0,
+        "flow_direction": "E",
+        "samples": 419
+      },
+      "soil": {
+        "clay_pct": 20.4,
+        "sand_pct": 16.5,
+        "silt_pct": 63.1,
+        "soc_g_per_kg": 29.0,
+        "texture": {
+          "usda": "silt loam",
+          "label_pl": "pyłowa (lessowa), dobrze trzyma wodę, podatna na erozję",
+          "hydro_group": "B"
+        }
+      },
+      "runoff_estimate": "średni"
+    }
+  }
+}

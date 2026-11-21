@@ -1,0 +1,9 @@
+{
+  "name": "water_buddy",
+  "private": true,
+  "scripts": {
+    "dev": "npm_config_cache=/tmp/water-buddy-npm npm --prefix github/fieldtwin6767/frontend run dev --",
+    "build": "npm_config_cache=/tmp/water-buddy-npm npm --prefix github/fieldtwin6767/frontend run build --",
+    "start": "npm_config_cache=/tmp/water-buddy-npm npm --prefix github/fieldtwin6767/frontend run start --"
+  }
+}

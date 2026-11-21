@@ -1,0 +1,30 @@
+28 scen Sentinel-2 (zachmurzenie sceny < 60%)
+2026-04-05 S2C_34UFA_20260405_0_L2A: chmury nad polami 32% -> chmury
+2026-04-07 S2A_34UFA_20260407_0_L2A: chmury nad polami 45% -> chmury
+2026-04-17 S2A_34UFA_20260417_0_L2A: chmury nad polami 0% -> OK
+2026-04-25 S2C_34UFA_20260425_0_L2A: chmury nad polami 7% -> chmury
+2026-04-27 S2A_34UFA_20260427_0_L2A: chmury nad polami 0% -> OK
+2026-05-05 S2C_34UFA_20260505_0_L2A: chmury nad polami 0% -> OK
+2026-05-10 S2B_34UFA_20260510_0_L2A: chmury nad polami 22% -> chmury
+2026-05-20 S2B_34UFA_20260520_0_L2A: chmury nad polami 100% -> chmury
+2026-05-30 S2B_34UFA_20260530_0_L2A: chmury nad polami 0% -> OK
+2026-06-14 S2C_34UFA_20260614_0_L2A: chmury nad polami 4% -> chmury
+2026-06-19 S2B_34UFA_20260619_0_L2A: chmury nad polami 36% -> chmury
+2026-06-24 S2C_34UFA_20260624_0_L2A: chmury nad polami 0% -> OK
+2026-06-26 S2A_34UFA_20260626_0_L2A: chmury nad polami 65% -> chmury
+2026-06-29 S2B_34UFA_20260629_0_L2A: chmury nad polami 1% -> OK
+2026-07-16 S2A_34UFA_20260716_0_L2A: chmury nad polami 42% -> chmury
+2026-07-26 S2A_34UFA_20260726_0_L2A: chmury nad polami 0% -> OK
+2026-07-29 S2B_34UFA_20260729_0_L2A: chmury nad polami 7% -> chmury
+2026-08-03 S2C_34UFA_20260803_0_L2A: chmury nad polami 96% -> chmury
+2026-08-05 S2A_34UFA_20260805_0_L2A: chmury nad polami 0% -> OK
+2026-08-13 S2C_34UFA_20260813_0_L2A: chmury nad polami 2% -> OK
+2026-08-15 S2A_34UFA_20260815_0_L2A: chmury nad polami 0% -> OK
+2026-08-23 S2C_34UFA_20260823_0_L2A: chmury nad polami 1% -> OK
+2026-08-25 S2A_34UFA_20260825_0_L2A: chmury nad polami 8% -> chmury
+2026-08-28 S2B_34UFA_20260828_0_L2A: chmury nad polami 88% -> chmury
+2026-09-02 S2C_34UFA_20260902_0_L2A: chmury nad polami 0% -> OK
+2026-09-07 S2B_34UFA_20260907_0_L2A: chmury nad polami 23% -> chmury
+2026-09-14 S2A_34UFA_20260914_0_L2A: chmury nad polami 39% -> chmury
+2026-09-27 S2B_34UFA_20260927_0_L2A: chmury nad polami 1% -> OK
+bezchmurne daty: 2026-04-17, 2026-04-27, 2026-05-05, 2026-05-30, 2026-06-24, 2026-06-29, 2026-07-26, 2026-08-05, 2026-08-13, 2026-08-15, 2026-08-23, 2026-09-02, 2026-09-27

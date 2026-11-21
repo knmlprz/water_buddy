@@ -1,0 +1,27 @@
+2376 punktów, zadań 231, do zrobienia 231
+10/231 zadań, 100s
+20/231 zadań, 172s
+30/231 zadań, 387s
+40/231 zadań, 509s
+50/231 zadań, 734s
+60/231 zadań, 876s
+BŁĄD ('season', 2025, 6): HTTP 408: b'query timeout reached' for https://api.meteomatics.com/2025-06-02T00:00:00Z--2025-07-01T00:00:00Z:P1D/precip_24h:mm,t_max_2m_24h:C,t_min_2m_24h:C,d
+BŁĄD ('season', 2025, 8): HTTP 408: b'query timeout reached' for https://api.meteomatics.com/2025-08-02T00:00:00Z--2025-09-01T00:00:00Z:P1D/precip_24h:mm,t_max_2m_24h:C,t_min_2m_24h:C,d
+80/231 zadań, 993s
+90/231 zadań, 1028s
+100/231 zadań, 1089s
+110/231 zadań, 1128s
+120/231 zadań, 1171s
+130/231 zadań, 1212s
+140/231 zadań, 1262s
+150/231 zadań, 1302s
+160/231 zadań, 1349s
+170/231 zadań, 1400s
+180/231 zadań, 1576s
+190/231 zadań, 1681s
+200/231 zadań, 1776s
+210/231 zadań, 1860s
+220/231 zadań, 1937s
+230/231 zadań, 2079s
+231/231 zadań, 2086s
+zapisano 235224 wierszy do events_monthly.csv

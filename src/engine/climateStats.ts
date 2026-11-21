@@ -1,5 +1,12 @@
 import type { CropParameter } from '../data/crops';
 import type { SoilWaterGroup } from '../data/thresholds';
+import {
+  getIungThreshold,
+  iungCategoryFromLabel,
+  IUNG_PERIODS,
+  type IungPeriod,
+  type IungSoilCategory
+} from '../data/iungThresholds';
 import { isDateInMmDdWindow } from './waterBrain';
 import type { CumulativeKbwPoint, YearlyCriticalKbwBar } from '../types/analysis';
 
@@ -265,6 +272,12 @@ export function analyzeMeteoHistory(
   kbwCumulative: CumulativeKbwPoint[];
   kbwCriticalWindowByYear: YearlyCriticalKbwBar[];
   kbwDryThresholdMm: number;
+  kbwReferenceLabel: string;
+  iungCategory: IungSoilCategory | null;
+  iungPeriodLabel: string | null;
+  iungKbwMm: number | null;
+  iungThresholdMm: number | null;
+  iungDrought: boolean | null;
 } {
   // Enforce hard cutoff <= analysisDate (Rule 2: zero future data!)
   const records = allRecords
@@ -409,21 +422,11 @@ export function analyzeMeteoHistory(
       ? Math.round(lastCum.thisYear - lastCum.median10y)
       : null;
 
-  // 5. Chart 2: 10-year critical window KBW bars & dryYearsLast10
-  // Use soil-appropriate threshold: cat I -> prog_kbw_kat1_mm, cat II+ -> prog_kbw_kat2_mm (or -50mm signal for short windows)
-  const kbwDryThresholdMm =
-    soil.id === 'piasek_luzny' ? crop.prog_kbw_kat1_mm : crop.prog_kbw_kat2_mm;
+  // 5. Agricultural drought per IUNG SMSR (Rozp. MRiRW 2019): KBW of a 6-decade period vs the
+  // threshold for this crop and soil category. Chart 2 / dryYearsLast10 use the same period each year.
+  const iung = assessIungDrought(records, crop, soil, analysisDate);
 
-  const kbwCriticalWindowByYear: YearlyCriticalKbwBar[] = [];
-  let dryYearsLast10 = 0;
-
-  for (let y = analysisYear - 10; y <= analysisYear; y++) {
-    const startStr = `${y}-${crop.okno_start_mmdd}`;
-    const rawEndStr = `${y}-${crop.okno_koniec_mmdd}`;
-    // Strictly never exceed analysisDate!
-    const endStr = y === analysisYear && rawEndStr > analysisDate ? analysisDate : rawEndStr;
-    if (y === analysisYear && startStr > analysisDate) continue;
-
+  const kbwSumBetween = (startStr: string, endStr: string): number | null => {
     let sumKbw = 0;
     let count = 0;
     for (const r of records) {
@@ -432,10 +435,33 @@ export function analyzeMeteoHistory(
       sumKbw += r.precipMm - r.et0Mm;
       count++;
     }
-    if (count < 5) continue;
+    return count >= 5 ? Math.round(sumKbw) : null;
+  };
 
-    const rounded = Math.round(sumKbw);
-    const isDry = rounded < kbwDryThresholdMm;
+  // Without an IUNG threshold (e.g. lucerne) fall back to the crop's own critical-window thresholds
+  const usesIung = iung.referencePeriod !== null && iung.referenceThresholdMm !== null;
+  const kbwDryThresholdMm = usesIung
+    ? (iung.referenceThresholdMm as number)
+    : soil.id === 'piasek_luzny'
+      ? crop.prog_kbw_kat1_mm
+      : crop.prog_kbw_kat2_mm;
+  const windowStartMmDd = usesIung ? iung.referencePeriod!.startMmDd : crop.okno_start_mmdd;
+  const windowEndMmDd = usesIung ? iung.referencePeriod!.endMmDd : crop.okno_koniec_mmdd;
+
+  const kbwCriticalWindowByYear: YearlyCriticalKbwBar[] = [];
+  let dryYearsLast10 = 0;
+
+  for (let y = analysisYear - 10; y <= analysisYear; y++) {
+    const startStr = `${y}-${windowStartMmDd}`;
+    const rawEndStr = `${y}-${windowEndMmDd}`;
+    // Strictly never exceed analysisDate!
+    const endStr = y === analysisYear && rawEndStr > analysisDate ? analysisDate : rawEndStr;
+    if (y === analysisYear && startStr > analysisDate) continue;
+
+    const rounded = kbwSumBetween(startStr, endStr);
+    if (rounded === null) continue;
+
+    const isDry = usesIung ? rounded <= kbwDryThresholdMm : rounded < kbwDryThresholdMm;
     if (y < analysisYear && isDry) {
       dryYearsLast10++;
     }
@@ -447,6 +473,10 @@ export function analyzeMeteoHistory(
     });
   }
 
+  const kbwReferenceLabel = usesIung
+    ? `okres IUNG ${iung.referencePeriod!.label}, gleba kat. ${iung.category}`
+    : 'okno krytyczne uprawy';
+
   const deltaPhrase =
     medianDeltaMm === null
       ? ''
@@ -456,7 +486,9 @@ export function analyzeMeteoHistory(
           ? ` Bieżący sezon od 21.03 ma bilans o ${medianDeltaMm} mm lepszy od wieloletniej mediany.`
           : ' Bieżący sezon od 21.03 jest zbliżony do wieloletniej mediany.';
 
-  const tenYearSummaryPl = `W ${dryYearsLast10} z ostatnich 10 lat okno krytyczne dla uprawy (${crop.nazwa_pl}) przekraczało próg suszy KBW (${kbwDryThresholdMm} mm).${deltaPhrase}`;
+  const tenYearSummaryPl = usesIung
+    ? `W ${dryYearsLast10} z ostatnich 10 lat bilans KBW w okresie ${iung.referencePeriod!.label} spadał do progu suszy rolniczej dla uprawy (${crop.nazwa_pl}) na glebie kat. ${iung.category} (${kbwDryThresholdMm} mm wg IUNG / Rozp. MRiRW).${deltaPhrase}`
+    : `W ${dryYearsLast10} z ostatnich 10 lat okno krytyczne dla uprawy (${crop.nazwa_pl}) przekraczało próg suszy KBW (${kbwDryThresholdMm} mm).${deltaPhrase}`;
 
   // 6. FAO-56 / Drupka daily soil water depletion from March 1 to analysisDate
   const depletionFraction = computeFao56DailyDepletion(records, crop, soil, analysisDate);
@@ -476,7 +508,91 @@ export function analyzeMeteoHistory(
     medianDeltaMm,
     kbwCumulative,
     kbwCriticalWindowByYear,
-    kbwDryThresholdMm
+    kbwDryThresholdMm,
+    kbwReferenceLabel,
+    iungCategory: iung.category,
+    iungPeriodLabel: iung.currentPeriod?.label ?? null,
+    iungKbwMm: iung.currentKbwMm,
+    iungThresholdMm: iung.currentThresholdMm,
+    iungDrought: iung.drought
+  };
+}
+
+export interface IungDroughtAssessment {
+  category: IungSoilCategory | null;
+  // Latest completed IUNG period (<= 10 days before analysisDate) where the crop is assessed
+  currentPeriod: IungPeriod | null;
+  currentKbwMm: number | null;
+  currentThresholdMm: number | null;
+  drought: boolean | null; // null = brak oceny (poza sezonem, uprawa/gleba nieobjęta rozporządzeniem)
+  // Period used for the 10-year comparison (current one, or the one closest to the crop's critical window)
+  referencePeriod: IungPeriod | null;
+  referenceThresholdMm: number | null;
+}
+
+export function assessIungDrought(
+  records: DailyMeteoRecord[],
+  crop: CropParameter,
+  soil: SoilWaterGroup,
+  analysisDate: string
+): IungDroughtAssessment {
+  const category = iungCategoryFromLabel(soil.kategoria_iung);
+  const year = analysisDate.slice(0, 4);
+  const applicable = IUNG_PERIODS.filter(
+    (p) => getIungThreshold(crop.id, category, p.nr) !== null
+  );
+
+  const daysBetween = (a: string, b: string) =>
+    Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+
+  const completed = applicable.filter((p) => `${year}-${p.endMmDd}` <= analysisDate);
+  const latest = completed[completed.length - 1] ?? null;
+  const currentPeriod =
+    latest && daysBetween(`${year}-${latest.endMmDd}`, analysisDate) <= 10 ? latest : null;
+
+  let currentKbwMm: number | null = null;
+  let currentThresholdMm: number | null = null;
+  let drought: boolean | null = null;
+  if (currentPeriod) {
+    const startStr = `${year}-${currentPeriod.startMmDd}`;
+    const endStr = `${year}-${currentPeriod.endMmDd}`;
+    let sum = 0;
+    let count = 0;
+    for (const r of records) {
+      if (r.date < startStr) continue;
+      if (r.date > endStr) break;
+      sum += r.precipMm - r.et0Mm;
+      count++;
+    }
+    // Require nearly the whole 6-decade period, otherwise the sum is not comparable with IUNG
+    if (count >= 55) {
+      currentKbwMm = Math.round(sum);
+      currentThresholdMm = getIungThreshold(crop.id, category, currentPeriod.nr);
+      drought = currentThresholdMm !== null ? currentKbwMm <= currentThresholdMm : null;
+    }
+  }
+
+  let referencePeriod: IungPeriod | null = currentPeriod;
+  if (!referencePeriod && applicable.length > 0) {
+    const target = `${year}-${crop.okno_koniec_mmdd}`;
+    referencePeriod = applicable.reduce((best, p) =>
+      Math.abs(daysBetween(`${year}-${p.endMmDd}`, target)) <
+      Math.abs(daysBetween(`${year}-${best.endMmDd}`, target))
+        ? p
+        : best
+    );
+  }
+
+  return {
+    category,
+    currentPeriod,
+    currentKbwMm,
+    currentThresholdMm,
+    drought,
+    referencePeriod,
+    referenceThresholdMm: referencePeriod
+      ? getIungThreshold(crop.id, category, referencePeriod.nr)
+      : null
   };
 }
 
@@ -515,7 +631,15 @@ export function computeFao56DailyDepletion(
 
     // Effective rainfall (~85% of rain above 2mm avoids light interception/runoff)
     const effectiveRain = r.precipMm > 2 ? r.precipMm * 0.85 : r.precipMm * 0.5;
-    const etc = r.et0Mm * kc;
+    // FAO-56 eq. 84: once depletion exceeds RAW (= p * TAW) plants transpire less (Ks < 1),
+    // so the root zone empties asymptotically instead of linearly to 0.
+    const depletionMm = tawMm - storageMm;
+    const rawMm = crop.dopuszczalne_wyczerpanie_p * tawMm;
+    const ks =
+      depletionMm <= rawMm
+        ? 1
+        : Math.max((tawMm - depletionMm) / ((1 - crop.dopuszczalne_wyczerpanie_p) * tawMm), 0);
+    const etc = r.et0Mm * kc * ks;
     storageMm = Math.min(Math.max(storageMm + effectiveRain - etc, 0), tawMm);
   }
 

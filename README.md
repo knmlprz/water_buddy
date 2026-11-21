@@ -58,7 +58,7 @@ Wszystkie zmienne środowiskowe są opcjonalne — brak kluczy w kodzie źródł
 - `NODE_ENV` (`development` | `production`) — tryb serwera,
 - `APP_URL` — opcjonalny publiczny adres URL wdrożenia,
 - `OPEN_METEO_API_KEY` — opcjonalny klucz płatnego planu Open-Meteo (bez limitu 10 000 zapytań dziennie); bez klucza archiwum pogody jest pobierane raz na komórkę 0,1° i zapisywane w `.cache/meteo` (katalog można zmienić zmienną `METEO_CACHE_DIR`),
-- `GEMINI_API_KEY` — opcjonalny szablon (silnik rekomendacji jest w 100% deterministyczny i nie wymaga LLM).
+- silnik rekomendacji jest w 100% deterministyczny i nie korzysta z modeli językowych (brak klucza Gemini/LLM).
 
 ---
 
@@ -186,6 +186,9 @@ W katalogu `public/data/` znajdują się deterministyczne tabele agronomiczne i 
 | `rules.json` / `rules.csv` | 20 reguł `przyczyna → rekomendacja` w kolejności KOWR (`kolejnosc_kowr` 1–4) | CDR 2025, UE NWRM, POLSA 2024, GDOŚ, KOWR | `2026-11-21` |
 | `limitations.json` / `limitations.csv` | 10 warunkowych i stałych zdań do sekcji „Ograniczenia” raportu | KOWR pkt 3.3, POLSA 2024, CDR 2025, Prawo wodne | `2026-11-21` |
 | `api_sources.json` / `api_sources.csv` / `README_ZRODLA_I_LICENCJE.md` | Specyfikacja, zweryfikowane zapytania i licencje 9 otwartych źródeł API | Ręczna i automatyczna weryfikacja HTTP/OGC | `2026-11-21` |
+| `src/data/iungThresholds.ts` | Progi KBW suszy rolniczej: gatunek × kategoria gleby I–IV × 14 okresów sześciodekadowych (zboża ozime/jare, kukurydza, rzepak, ziemniak, burak, strączkowe) | Rozp. MRiRW z 11.04.2019, tabela IUNG-PIB SMSR https://susza.iung.pulawy.pl/progi/ | pobrano `2026-11-21` |
+
+Ocena „susza rolnicza TAK/NIE” w raporcie porównuje KBW z ERA5 (liczony na żywo dla punktu działki) z powyższym progiem dla wybranej uprawy i kategorii gleby IUNG — tak jak robi to SMSR na poziomie gminy. Drabina EDO (SPI/SMA/NDVI) jest pokazywana osobno jako anomalia względem normy i nie przesądza o suszy rolniczej. Bilans wody w glebie (FAO-56) uwzględnia współczynnik stresu Ks.
 
 ---
 

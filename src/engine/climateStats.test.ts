@@ -106,3 +106,53 @@ test('computeSlopeAndDepression detects >4% slope and local depression >0.5m', (
   });
   assert.equal(bowl.hasDepression, true);
 });
+
+// Synthetic season: constant daily rain/ET0 from 2015-01-01 to the given end date
+function syntheticSeason(endDate: string, rainMm: number, et0Mm: number): DailyMeteoRecord[] {
+  const out: DailyMeteoRecord[] = [];
+  const d = new Date('2015-01-01T00:00:00Z');
+  const end = new Date(`${endDate}T00:00:00Z`);
+  while (d <= end) {
+    out.push({
+      date: d.toISOString().slice(0, 10),
+      precipMm: rainMm,
+      et0Mm: et0Mm,
+      tempMeanC: 15,
+      soilMoistureTop: 0.2
+    });
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
+test('IUNG thresholds depend on soil category: same KBW is drought on sand (I) but not on loess (IV)', () => {
+  const crop = CROPS_DATA.find((c) => c.id === 'pszenica_ozima')!;
+  const sand = SOIL_WATER_GROUPS.find((s) => s.id === 'piasek_luzny')!;
+  const loess = SOIL_WATER_GROUPS.find((s) => s.id === 'pyl_zwykly')!;
+  // 61 days x (1.0 - 3.75) mm ≈ -168 mm for period 11.V–10.VII (thresholds: kat. I -165, kat. IV -251)
+  const records = syntheticSeason('2025-07-10', 1.0, 3.75);
+
+  const onSand = analyzeMeteoHistory(records, crop, sand, '2025-07-10');
+  const onLoess = analyzeMeteoHistory(records, crop, loess, '2025-07-10');
+
+  assert.equal(onSand.iungPeriodLabel, '11.V–10.VII');
+  assert.equal(onSand.iungThresholdMm, -165);
+  assert.equal(onSand.iungDrought, true);
+  assert.equal(onLoess.iungThresholdMm, -251);
+  assert.equal(onLoess.iungDrought, false);
+});
+
+test('IUNG assessment is null outside the reporting season', () => {
+  const crop = CROPS_DATA.find((c) => c.id === 'pszenica_ozima')!;
+  const soil = SOIL_WATER_GROUPS.find((s) => s.id === 'piasek_gliniasty')!;
+  const res = analyzeMeteoHistory(syntheticSeason('2025-11-20', 1.5, 1.0), crop, soil, '2025-11-20');
+  assert.equal(res.iungDrought, null);
+});
+
+test('FAO-56 bucket with Ks does not empty a deep loess profile to 100% in one dry season', () => {
+  const crop = CROPS_DATA.find((c) => c.id === 'pszenica_ozima')!;
+  const loess = SOIL_WATER_GROUPS.find((s) => s.id === 'pyl_zwykly')!;
+  const records = syntheticSeason('2025-07-10', 1.0, 3.75);
+  const depletion = computeFao56DailyDepletion(records, crop, loess, '2025-07-10');
+  assert.ok(depletion < 0.95, `Expected depletion < 95% with Ks, got ${depletion}`);
+});

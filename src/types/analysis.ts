@@ -93,6 +93,7 @@ export interface AnalyzeApiResponse {
     kbwCumulative: CumulativeKbwPoint[];
     kbwCriticalWindowByYear: YearlyCriticalKbwBar[];
     kbwDryThresholdMm: number;
+    kbwReferenceLabel?: string;
     ndvi: NdviSeasonPoint[];
     ndviMedianRef: number | null;
   };

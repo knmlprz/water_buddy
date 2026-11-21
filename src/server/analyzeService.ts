@@ -249,10 +249,13 @@ async function fetchNmtElevation(northingX: number, eastingY: number): Promise<n
     const url = `https://services.gugik.gov.pl/nmt/?request=GetHByXY&x=${northingX.toFixed(1)}&y=${eastingY.toFixed(1)}`;
     const res = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT },
+      // GUGiK throttling redirects to a ~130 MB junk response (same as ULDK) — never follow it
+      redirect: 'manual',
       signal: AbortSignal.timeout(4500)
     });
     if (!res.ok) return null;
     const raw = (await res.text()).trim();
+    if (raw.length > 32) return null;
     const num = Number(raw.replace(',', '.'));
     return Number.isFinite(num) && num > -20 && num < 2600 ? num : null;
   } catch {
@@ -880,6 +883,7 @@ interface S2FetchResult {
   clearPixelPct: number | null;
   seasonSeries: NdviSeasonPoint[];
   status: FieldStatus;
+  failureReason: string | null;
   anomalyStatus: FieldStatus;
   durationMs: number;
 }
@@ -985,8 +989,14 @@ async function evaluateSentinelScene(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    // Check SCL first (fast 20m band) to avoid downloading RGB/NIR on cloudy scenes
-    const scl = await readCogWindowMean(sclHref, utmBbox, controller.signal);
+    // All four COGs in parallel: each read costs ~2–5 s of HTTP range requests, so reading SCL
+    // first and the bands afterwards (~7–8 s) did not fit the per-scene timeout.
+    const [scl, red, nir, swir] = await Promise.all([
+      readCogWindowMean(sclHref, utmBbox, controller.signal),
+      readCogWindowMean(redHref, utmBbox, controller.signal),
+      readCogWindowMean(nirHref, utmBbox, controller.signal),
+      swirHref ? readCogWindowMean(swirHref, utmBbox, controller.signal) : Promise.resolve(null)
+    ]);
     if (!scl || scl.length === 0) return null;
 
     let clearCount = 0;
@@ -996,12 +1006,6 @@ async function evaluateSentinelScene(
     }
     const clearPixelPct = Math.round((clearCount / scl.length) * 100);
     if (clearPixelPct < 70) return null;
-
-    const [red, nir, swir] = await Promise.all([
-      readCogWindowMean(redHref, utmBbox, controller.signal),
-      readCogWindowMean(nirHref, utmBbox, controller.signal),
-      swirHref ? readCogWindowMean(swirHref, utmBbox, controller.signal) : Promise.resolve(null)
-    ]);
 
     if (!red || !nir || red.length === 0 || nir.length === 0) return null;
 
@@ -1100,7 +1104,9 @@ async function fetchSentinel2Data(
   if (cached) return cached;
 
   const started = Date.now();
-  const HARD_BUDGET_MS = 14000;
+  // The other sources finish in ~3 s, so Sentinel-2 may use most of the 30 s KOWR limit;
+  // on slow (mobile) links a single scene needs 10+ s of HTTP range reads.
+  const HARD_BUDGET_MS = 20000;
   const [lat, lon] = parcel.centroid;
   const searchBbox: [number, number, number, number] = [
     Number((lon - 0.005).toFixed(5)),
@@ -1131,10 +1137,11 @@ async function fetchSentinel2Data(
     b.properties.datetime.localeCompare(a.properties.datetime)
   );
 
-  // Pick up to 4 candidate scenes: latest 3 within 30 days + up to 2 earlier in season for the chart
+  // Pick the 2 latest scenes within 30 days (fewer parallel COG streams on slow links)
+  // + up to 2 earlier in season for the chart
   const recentCandidates = sortedDesc
     .filter((f) => diffDaysIso(analysisDate, f.properties.datetime.slice(0, 10)) <= 30)
-    .slice(0, 3);
+    .slice(0, 2);
   const olderCandidates = sortedDesc
     .filter((f) => diffDaysIso(analysisDate, f.properties.datetime.slice(0, 10)) > 30)
     .slice(0, 2);
@@ -1142,18 +1149,30 @@ async function fetchSentinel2Data(
   let latestValid: { pt: NdviSeasonPoint; id: string } | null = null;
   const seasonPoints: NdviSeasonPoint[] = [];
 
-  // Step 1: Evaluate recent scenes first until we find a valid >=70% clear scene
-  for (const feat of recentCandidates) {
-    if (Date.now() - started > HARD_BUDGET_MS - 3000) break;
-    const pt = await evaluateSentinelScene(feat, parcel.bbox, parcel.centroid, 6000);
-    if (pt) {
-      seasonPoints.push(pt);
-      if (!latestValid) {
-        latestValid = { pt, id: feat.id };
-      }
-      if (seasonPoints.length >= 2) break;
+  // Step 1: Evaluate the recent scenes in parallel and keep the newest valid (>=70% clear) one
+  const recentResults = await Promise.all(
+    recentCandidates.map((feat) =>
+      evaluateSentinelScene(
+        feat,
+        parcel.bbox,
+        parcel.centroid,
+        Math.max(HARD_BUDGET_MS - (Date.now() - started) - 1000, 3000)
+      )
+    )
+  );
+  for (let idx = 0; idx < recentResults.length; idx++) {
+    const pt = recentResults[idx];
+    if (!pt) continue;
+    seasonPoints.push(pt);
+    if (!latestValid) {
+      latestValid = { pt, id: recentCandidates[idx].id };
     }
   }
+  // Scenes existed but the COG reads ran out of the time budget — not the same as "only clouds"
+  const recentTimedOut =
+    !latestValid &&
+    recentCandidates.length > 0 &&
+    Date.now() - started >= HARD_BUDGET_MS - 1500;
 
   // Step 2: Evaluate older seasonal scenes in parallel if time budget permits
   const remainingForSeason = HARD_BUDGET_MS - (Date.now() - started);
@@ -1237,11 +1256,22 @@ async function fetchSentinel2Data(
     clearPixelPct: latestValid?.pt.clearPixelPct ?? null,
     seasonSeries: seasonPoints,
     status: latestValid ? 'ok' : 'brak',
+    failureReason: latestValid
+      ? null
+      : recentTimedOut
+        ? 'zdjęcia Sentinel-2 są dostępne, ale nie udało się ich pobrać w limicie czasu (wolne łącze lub przeciążony serwer)'
+        : features.length === 0
+          ? 'katalog Sentinel-2 nie zwrócił scen dla tej daty (lub nie odpowiedział)'
+          : // evaluateSentinelScene returns null both for clouds and for failed COG reads
+            'nie udało się odczytać bezchmurnej sceny nad działką z ostatnich 30 dni (zachmurzenie albo błąd pobierania plików satelitarnych)',
     anomalyStatus,
     durationMs: Date.now() - started
   };
 
-  setCached(s2Cache, cacheKey, result, 15 * 60 * 1000);
+  // A timeout is transient — do not cache it, so the next request can try again
+  if (!recentTimedOut) {
+    setCached(s2Cache, cacheKey, result, 15 * 60 * 1000);
+  }
   return result;
 }
 
@@ -1474,7 +1504,13 @@ export async function runFullParcelAnalysis(
           medianDeltaMm: null,
           kbwCumulative: [],
           kbwCriticalWindowByYear: [],
-          kbwDryThresholdMm: crop.prog_kbw_kat2_mm
+          kbwDryThresholdMm: crop.prog_kbw_kat2_mm,
+          kbwReferenceLabel: 'okno krytyczne uprawy',
+          iungCategory: null,
+          iungPeriodLabel: null,
+          iungKbwMm: null,
+          iungThresholdMm: null,
+          iungDrought: null
         };
 
   // Determine soil cover: NDVI >= 0.3 on fresh satellite scene, else seasonal phenology estimate
@@ -1492,7 +1528,9 @@ export async function runFullParcelAnalysis(
     landUse: hydroAndLandUse.landUse,
     isNatura2000: soilProtected.isNatura2000,
     slopePct: terrain.slopePct,
+    slopeAvailable: terrain.status === 'ok',
     hasSoilCover,
+    soilCoverEstimated: !s2Fresh,
     hasDepression: terrain.hasDepression,
     ditchDistanceM: hydroAndLandUse.ditchDistanceM,
     kbwMm: meteoStats.kbw60dMm,
@@ -1505,7 +1543,12 @@ export async function runFullParcelAnalysis(
     satelliteAgeDays: s2.satelliteAgeDays,
     depletionFraction: meteoStats.depletionFraction,
     dryYearsLast10: meteoStats.dryYearsLast10,
-    meteoAvailable: meteo.status === 'ok'
+    meteoAvailable: meteo.status === 'ok',
+    iungDrought: meteoStats.iungDrought,
+    iungKbwMm: meteoStats.iungKbwMm,
+    iungThresholdMm: meteoStats.iungThresholdMm,
+    iungPeriodLabel: meteoStats.iungPeriodLabel,
+    iungCategory: meteoStats.iungCategory
   };
 
   const result = runWaterDiagnosis(rawInput);
@@ -1573,7 +1616,7 @@ export async function runFullParcelAnalysis(
       displayValue:
         s2.ndvi !== null
           ? `${s2.ndvi.toFixed(2)} (czystość ${s2.clearPixelPct ?? 100}%)`
-          : 'brak bezchmurnej sceny',
+          : (s2.failureReason ?? 'brak bezchmurnej sceny'),
       source: 'Sentinel-2 L2A COG (Earth Search STAC)',
       dataDate: s2.latestSceneDate ?? 'brak',
       status: s2.status
@@ -1625,7 +1668,11 @@ export async function runFullParcelAnalysis(
       key: 'hasSoilCover',
       label: 'Okrywa roślinna gleby',
       value: hasSoilCover,
-      displayValue: hasSoilCover ? 'Obecna (NDVI ≥ 0,30)' : 'Brak okrywy (gleba odkryta)',
+      displayValue: s2Fresh
+        ? hasSoilCover
+          ? 'Obecna (NDVI ≥ 0,30)'
+          : 'Brak okrywy (gleba odkryta)'
+        : `Nieznana — szacunek z kalendarza: ${hasSoilCover ? 'prawdopodobnie obecna' : 'prawdopodobnie odkryta'} (nie liczony do ryzyka)`,
       source: s2Fresh
         ? `Sentinel-2 L2A (${s2.latestSceneDate})`
         : 'Szacunek fenologiczny (brak świeżej sceny satelitarnej)',
@@ -1676,9 +1723,23 @@ export async function runFullParcelAnalysis(
         meteo.status === 'ok'
           ? `${Math.round(meteoStats.depletionFraction * 100)}% (próg ${Math.round(crop.dopuszczalne_wyczerpanie_p * 100)}%)`
           : 'brak danych',
-      source: 'Bilans dzienny FAO-56 / metoda Drupki od 1.03',
+      source: 'Bilans dzienny FAO-56 / metoda Drupki od 1.03 (ze współczynnikiem stresu Ks)',
       dataDate: meteo.latestDate,
       status: meteo.status
+    },
+    iungDrought: {
+      key: 'iungDrought',
+      label: 'Susza rolnicza wg progów IUNG (Rozp. MRiRW 2019)',
+      value: meteoStats.iungDrought,
+      displayValue:
+        meteoStats.iungDrought === null
+          ? meteo.status !== 'ok'
+            ? 'brak danych'
+            : 'nie oceniono (poza okresem raportowania IUNG lub uprawa/gleba nieobjęta progami)'
+          : `${meteoStats.iungDrought ? 'TAK' : 'NIE'} — KBW ${meteoStats.iungKbwMm} mm vs próg ${meteoStats.iungThresholdMm} mm (okres ${meteoStats.iungPeriodLabel}, gleba kat. ${meteoStats.iungCategory})`,
+      source: 'Open-Meteo ERA5 (KBW) + progi IUNG-PIB SMSR',
+      dataDate: meteo.latestDate,
+      status: meteoStats.iungDrought === null ? 'brak' : 'ok'
     }
   };
 
@@ -1705,7 +1766,7 @@ export async function runFullParcelAnalysis(
       name: 'Copernicus Sentinel-2 L2A (Earth Search STAC / AWS Open Data)',
       category: 'Teledetekcja satelitarna',
       usedFor: 'Pasma B04, B08, B11 i maska chmur SCL → NDVI, NDMI, okrywa gleby',
-      dataDate: s2.latestSceneDate ?? 'brak bezchmurnej sceny',
+      dataDate: s2.latestSceneDate ?? (s2.failureReason ?? 'brak bezchmurnej sceny'),
       fetchedAt: generatedAt,
       status: s2.status,
       license: 'Contains modified Copernicus Sentinel data 2026 (bezpłatne i otwarte)'
@@ -1783,6 +1844,7 @@ export async function runFullParcelAnalysis(
       kbwCumulative: meteoStats.kbwCumulative,
       kbwCriticalWindowByYear: meteoStats.kbwCriticalWindowByYear,
       kbwDryThresholdMm: meteoStats.kbwDryThresholdMm,
+      kbwReferenceLabel: meteoStats.kbwReferenceLabel,
       ndvi: s2.seasonSeries,
       ndviMedianRef: s2.ndviMedianRef
     },

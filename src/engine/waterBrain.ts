@@ -20,7 +20,9 @@ export interface ParcelDiagnosisInput {
   landUse: LandUseType;
   isNatura2000: boolean;
   slopePct: number;
+  slopeAvailable?: boolean; // false = brak odczytu NMT (slopePct = 0 nie oznacza wtedy płaskiego terenu)
   hasSoilCover: boolean;
+  soilCoverEstimated?: boolean; // true = okrywa zgadnięta z kalendarza (brak świeżego zdjęcia), nie pomiar
   hasDepression: boolean;
   ditchDistanceM: number;
   kbwMm: number; // 6-dekadowy / 30-60d KBW (mm)
@@ -35,6 +37,13 @@ export interface ParcelDiagnosisInput {
   dryYearsLast10: number; // ile lat z ostatnich 10 było suchych
   // false = nie udało się pobrać pogody; wskaźniki pogodowe są wtedy nieznane, a nie zerowe
   meteoAvailable?: boolean;
+  // Susza rolnicza wg progów KBW z Rozp. MRiRW 2019 (IUNG SMSR) dla uprawy × kategorii gleby × okresu.
+  // null/undefined = brak oceny (poza okresem raportowania, uprawa lub gleba nieobjęta progami).
+  iungDrought?: boolean | null;
+  iungKbwMm?: number | null;
+  iungThresholdMm?: number | null;
+  iungPeriodLabel?: string | null;
+  iungCategory?: string | null;
 }
 
 export interface DiagnosedCause {
@@ -197,17 +206,24 @@ export function calculateIrrigationDose(
     };
   }
 
+  // Gdy progi IUNG obejmują uprawę i glebę, to one rozstrzygają o deficycie (urzędowe kryterium
+  // suszy rolniczej); poziom EDO jest tylko anomalią klimatyczną względem normy.
+  const deficitConfirmed =
+    input.iungDrought === true ||
+    ((input.iungDrought === null || input.iungDrought === undefined) &&
+      (edoLevelCode === 'ostrzezenie' || edoLevelCode === 'alarm' || input.kbwMm < -80));
+
   const triggered =
-    inCriticalWindow &&
-    clampedDepletion >= crop.dopuszczalne_wyczerpanie_p &&
-    (edoLevelCode === 'ostrzezenie' || edoLevelCode === 'alarm' || input.kbwMm < -80);
+    inCriticalWindow && clampedDepletion >= crop.dopuszczalne_wyczerpanie_p && deficitConfirmed;
 
   if (!triggered) {
     const reason = !inCriticalWindow
       ? `Uprawa (${crop.nazwa_pl}) jest poza oknem krytycznym (${crop.okno_krytyczne_opis}).`
       : clampedDepletion < crop.dopuszczalne_wyczerpanie_p
         ? `Wyczerpanie zapasu wody (${Math.round(clampedDepletion * 100)}%) nie osiągnęło progu dopuszczalnego (${Math.round(crop.dopuszczalne_wyczerpanie_p * 100)}%).`
-        : 'Brak potwierdzonego deficytu w glebie (poziom EDO poniżej Ostrzeżenia oraz KBW >= −80 mm).';
+        : input.iungDrought === false
+          ? `Bilans wodny nie przekracza progu suszy rolniczej dla tej uprawy i gleby (KBW ${input.iungKbwMm} mm, próg ${input.iungThresholdMm} mm wg IUNG) — podlewanie nie jest uzasadnione.`
+          : 'Brak potwierdzonego deficytu w glebie (poziom EDO poniżej Ostrzeżenia oraz KBW >= −80 mm).';
 
     return {
       uzasadnione: false,
@@ -253,6 +269,9 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
   const satelliteAvailable =
     input.ndvi !== null && input.satelliteAgeDays !== null && input.satelliteAgeDays <= 14;
   const meteoAvailable = input.meteoAvailable !== false;
+  // Odkryta gleba liczy się do ryzyka tylko wtedy, gdy widać ją na zdjęciu, a nie gdy ją zgadujemy
+  const soilCoverKnown = input.soilCoverEstimated !== true;
+  const bareSoil = soilCoverKnown && !input.hasSoilCover;
 
   const { level: edoLevel, harvestFalseAlarmGuarded } = evaluateEdoLadder({
     spi1: input.spi1,
@@ -277,28 +296,44 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     input.kbwMm > 60 && (input.hasDepression || isHeavyOrMediumSoil);
 
   // 2. Diagnoza 4 czynników gospodarki wodnej (nie tylko bieżącej suszy letniej!)
-  const weatherHigh =
-    input.kbwMm < -120 ||
-    input.spi3 < -1.5 ||
-    input.dryYearsLast10 >= 6 ||
-    (input.kbwMm > 90 && hasExcessWaterRisk);
+  // Gdy jest ocena IUNG, to ona (próg zależny od uprawy i gleby) decyduje o silnym wpływie pogody;
+  // sama anomalia opadów (SPI) bez przekroczenia progu daje co najwyżej wpływ umiarkowany.
+  const iungAssessed = input.iungDrought === true || input.iungDrought === false;
+  const iungMarginMm =
+    iungAssessed && typeof input.iungKbwMm === 'number' && typeof input.iungThresholdMm === 'number'
+      ? input.iungKbwMm - input.iungThresholdMm
+      : null;
+
+  const weatherHigh = iungAssessed
+    ? (input.iungDrought === true && (iungMarginMm === null || iungMarginMm <= -20)) ||
+      (input.iungDrought === true && input.dryYearsLast10 >= 4) ||
+      (input.kbwMm > 90 && hasExcessWaterRisk)
+    : input.kbwMm < -120 ||
+      input.spi3 < -1.5 ||
+      input.dryYearsLast10 >= 6 ||
+      (input.kbwMm > 90 && hasExcessWaterRisk);
   const weatherMod =
     !weatherHigh &&
-    (input.kbwMm < -50 ||
-      input.spi3 < -1.0 ||
-      input.spi1 < -2.0 ||
-      input.dryYearsLast10 >= 4 ||
-      hasExcessWaterRisk);
+    (iungAssessed
+      ? input.iungDrought === true ||
+        input.spi3 < -1.0 ||
+        input.dryYearsLast10 >= 4 ||
+        hasExcessWaterRisk
+      : input.kbwMm < -50 ||
+        input.spi3 < -1.0 ||
+        input.spi1 < -2.0 ||
+        input.dryYearsLast10 >= 4 ||
+        hasExcessWaterRisk);
 
   const runoffHigh =
-    (input.slopePct > 4 && !input.hasSoilCover) ||
+    (input.slopePct > 4 && bareSoil) ||
     (input.ditchDistanceM <= 250 && input.dryYearsLast10 >= 4);
   const runoffMod =
     !runoffHigh &&
     (input.slopePct > 3 ||
-      (input.slopePct > 2 && !input.hasSoilCover) ||
+      (input.slopePct > 2 && bareSoil) ||
       input.ditchDistanceM <= 500 ||
-      !input.hasSoilCover ||
+      bareSoil ||
       hasExcessWaterRisk);
 
   const cropHigh =
@@ -308,7 +343,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
   const cropMod =
     !cropHigh &&
     (inCriticalWindow ||
-      (seasonPhase === 'odbudowa_jesien_zima' && (input.dryYearsLast10 >= 4 || !input.hasSoilCover)));
+      (seasonPhase === 'odbudowa_jesien_zima' && (input.dryYearsLast10 >= 4 || bareSoil)));
 
   const weatherCause: DiagnosedCause = meteoAvailable
     ? {
@@ -317,8 +352,14 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
         nasilenie: weatherHigh ? 'Wysokie' : weatherMod ? 'Umiarkowane' : 'Brak',
         dowod: hasExcessWaterRisk
           ? `Przewaga opadów (KBW +${input.kbwMm} mm) przy glebie zwięzłej lub zagłębieniu (ryzyko zastoin), a w ${input.dryYearsLast10}/10 ostatnich lat w sezonie było sucho.`
-          : `KBW 60 dni = ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm, SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.`,
-        zrodlo: 'Open-Meteo Archive (ERA5 / FAO ET0), CDR 2025 s. 66, POLSA tab. 6.4'
+          : `KBW 60 dni = ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm, SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.${
+              iungAssessed
+                ? ` Próg suszy rolniczej IUNG (okres ${input.iungPeriodLabel}, gleba kat. ${input.iungCategory}): ${input.iungThresholdMm} mm — ${input.iungDrought ? `PRZEKROCZONY (KBW okresu ${input.iungKbwMm} mm)` : `nieprzekroczony (KBW okresu ${input.iungKbwMm} mm)`}.`
+                : ''
+            }`,
+        zrodlo: iungAssessed
+          ? 'Open-Meteo Archive (ERA5 / FAO ET0), progi KBW IUNG-PIB SMSR (Rozp. MRiRW 2019)'
+          : 'Open-Meteo Archive (ERA5 / FAO ET0), CDR 2025 s. 66, POLSA tab. 6.4'
       }
     : {
         domena: 'Opad i upał',
@@ -350,7 +391,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
       domena: 'Spływ powierzchniowy',
       aktywna: runoffHigh || runoffMod,
       nasilenie: runoffHigh ? 'Wysokie' : runoffMod ? 'Umiarkowane' : 'Brak',
-      dowod: `Spadek terenu ${input.slopePct.toFixed(1)}%, okrywa gleby: ${input.hasSoilCover ? 'obecna' : 'brak okrywy (ryzyko spływu i erozji)'}, ${input.ditchDistanceM <= 500 ? `rów/ciek w odległości ok. ${input.ditchDistanceM} m (może przyspieszać odpływ)` : 'brak rowu w promieniu 500 m'}.`,
+      dowod: `${input.slopeAvailable === false ? 'Spadek terenu: brak odczytu NMT' : `Spadek terenu ${input.slopePct.toFixed(1)}%`}, okrywa gleby: ${!soilCoverKnown ? 'nieznana (brak świeżego zdjęcia satelitarnego)' : input.hasSoilCover ? 'obecna' : 'brak okrywy (ryzyko spływu i erozji)'}, ${input.ditchDistanceM <= 500 ? `rów/ciek w odległości ok. ${input.ditchDistanceM} m (może przyspieszać odpływ)` : 'brak rowu w promieniu 500 m'}.`,
       zrodlo: 'GUGiK NMT 1 m, BDOT10k, CDR 2025 s. 99–106'
     },
     {
@@ -383,7 +424,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
 
   // Rekomendacje polowe tylko dla gruntów ornych!
   if (input.landUse === 'arable') {
-    if (input.slopePct > 4 && !input.hasSoilCover && input.kbwMm < -50) {
+    if (input.slopePct > 4 && bareSoil && input.kbwMm < -50) {
       matchedIds.add('R04_STOK_BEZ_OKRYWY_KBW');
     }
     if (input.ditchDistanceM <= 500 && (input.kbwMm < -50 || input.spi3 < -1.0) && !input.isNatura2000) {
@@ -413,9 +454,9 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     } else if (soil.woda_dostepna_50cm_mm <= 70 || input.dryYearsLast10 >= 4) {
       matchedIds.add('R20_RETENCJA_PROCHNICA_WIELOLETNIA');
     }
-    if (!input.hasSoilCover && (input.kbwMm < -50 || input.spi3 < -1.0)) {
+    if (bareSoil && (input.kbwMm < -50 || input.spi3 < -1.0)) {
       matchedIds.add('R09_MULCZ_RESZTKI_POZNIWNE');
-    } else if (!input.hasSoilCover) {
+    } else if (bareSoil) {
       matchedIds.add('R19_OKRYWA_ZIMOWA_ODBUDOWA');
     }
     if (edoLevel.poziom !== 'brak' || input.kbwMm < -70) {
@@ -490,7 +531,19 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
   let riskScore = 0;
 
   if (input.landUse === 'arable') {
-    if (edoLevel.poziom === 'alarm') {
+    if (iungAssessed) {
+      if (input.iungDrought) {
+        riskScore += edoLevel.poziom === 'alarm' ? 50 : 40;
+        keyRisksPl.push(
+          `Susza rolnicza: bilans KBW (${input.iungKbwMm} mm w okresie ${input.iungPeriodLabel}) przekroczył próg ${input.iungThresholdMm} mm dla tej uprawy na glebie kat. ${input.iungCategory} (IUNG / Rozp. MRiRW).`
+        );
+      } else if (edoLevel.poziom !== 'brak') {
+        riskScore += 8;
+        keyRisksPl.push(
+          `Opady były niższe niż zwykle (SPI-3 ${input.spi3.toFixed(1)}), ale bilans KBW (${input.iungKbwMm} mm) nie przekracza progu suszy rolniczej ${input.iungThresholdMm} mm dla tej uprawy i gleby.`
+        );
+      }
+    } else if (edoLevel.poziom === 'alarm') {
       riskScore += 45;
       keyRisksPl.push('Trwa silny stres suszowy potwierdzony pogodowo, glebowo i satelitarnie.');
     } else if (edoLevel.poziom === 'ostrzezenie') {
@@ -524,16 +577,16 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
       riskScore += 8;
     }
 
-    if (input.slopePct > 4 && !input.hasSoilCover) {
+    if (input.slopePct > 4 && bareSoil) {
       riskScore += 22;
       keyRisksPl.push(`Duży spadek terenu (${input.slopePct.toFixed(1)}%) przy odkrytej glebie powoduje spływ deszczu i erozję zamiast wsiąkania.`);
     } else if (input.slopePct > 4) {
       riskScore += 14;
       keyRisksPl.push(`Nachylenie działki (${input.slopePct.toFixed(1)}%) sprzyja szybkiemu spływowi opadów ze stoku.`);
-    } else if (input.slopePct > 2 && !input.hasSoilCover) {
+    } else if (input.slopePct > 2 && bareSoil) {
       riskScore += 10;
       keyRisksPl.push(`Odkryta gleba na lekkim skłonie (${input.slopePct.toFixed(1)}%) traci wodę przez spływ i parowanie.`);
-    } else if (!input.hasSoilCover) {
+    } else if (bareSoil) {
       riskScore += 8;
       keyRisksPl.push('Brak okrywy roślinnej lub mulczu — odkryta gleba słabiej przyjmuje opad i szybciej wysycha.');
     }
@@ -561,6 +614,10 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
       ? `Uwaga sezonowa (${input.analysisDate}): jesienią i zimą parowanie jest bardzo niskie, więc brak bieżącej suszy (KBW ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm) nie oznacza, że działka ma bezpieczną gospodarkę wodną. To kluczowy moment na zatrzymanie opadów jesienno-zimowych w glebie i rowach, zanim wiosną ruszy wegetacja.`
       : null;
 
+  // Gdy progi IUNG mówią "brak suszy rolniczej", anomalia EDO nie podnosi poziomu oceny
+  const verdictEdo: EdoLadderLevel['poziom'] =
+    input.iungDrought === false ? 'brak' : edoLevel.poziom;
+
   let wmLevel: WaterManagementLevel = 'stabilna';
   let wmHeadline = 'Korzystne warunki wodne — utrzymuj dobre praktyki';
   let wmSummary = '';
@@ -573,27 +630,27 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     wmLevel = riskScore >= 34 ? 'podwyzszone_ryzyko' : 'wymaga_uwagi';
     wmHeadline = 'Ocena niepełna — brak danych pogodowych';
     wmSummary = `Na dzień ${input.analysisDate} nie udało się pobrać danych pogodowych, więc nie oceniamy bieżącej suszy ani potrzeby nawadniania. Poniższe wskazówki wynikają wyłącznie z gleby, ukształtowania terenu, sieci rowów i zdjęć satelitarnych. Spróbuj ponownie później, aby otrzymać pełny raport.`;
-  } else if (riskScore >= 55 || edoLevel.poziom === 'alarm') {
+  } else if (riskScore >= 55 || verdictEdo === 'alarm') {
     wmLevel = 'krytyczna';
     wmHeadline =
-      edoLevel.poziom === 'alarm'
+      verdictEdo === 'alarm'
         ? 'Trudna sytuacja wodna — silny deficyt i pilna potrzeba retencji'
         : 'Trudna gospodarka wodna — wysokie ryzyko utraty wody na tej działce';
     wmSummary =
       seasonPhase === 'odbudowa_jesien_zima'
         ? `Mimo chłodnej pory roku działka ma poważne słabości gospodarki wodnej (m.in. historia suchych lat, podatna gleba lub szybki odpływ wody). Bez poprawy retencji przed wiosną uprawy będą silnie narażone na deficyt.`
         : `Na działce nakłada się kilka poważnych problemów wodnych jednocześnie. Priorytetem jest ograniczenie ucieczki wody z pola i ochrona wilgoci w strefie korzeni.`;
-  } else if (riskScore >= 34 || edoLevel.poziom === 'ostrzezenie') {
+  } else if (riskScore >= 34 || verdictEdo === 'ostrzezenie') {
     wmLevel = 'podwyzszone_ryzyko';
     wmHeadline =
-      edoLevel.poziom === 'ostrzezenie'
+      verdictEdo === 'ostrzezenie' || input.iungDrought === true
         ? 'Podwyższone ryzyko — gleba przesycha i wymaga działań ochronnych'
         : 'Podwyższone ryzyko w gospodarce wodnej — warto zadbać o retencję';
     wmSummary =
       seasonPhase === 'odbudowa_jesien_zima'
         ? `Obecnie nie ma letniej suszy, ale parametry działki (gleba, odpływ lub historia suchych sezonów) pokazują, że łatwo traci ona wodę. Teraz jest najlepszy moment na zatrzymanie jesienno-zimowych opadów.`
         : `Działka wykazuje wyraźne ryzyko niedoboru lub ucieczki wody. Wdrożenie zabiegów retencyjnych i okrywy gleby wyraźnie poprawi bezpieczeństwo plonów.`;
-  } else if (riskScore >= 16 || edoLevel.poziom === 'obserwacja') {
+  } else if (riskScore >= 16 || verdictEdo === 'obserwacja') {
     wmLevel = 'wymaga_uwagi';
     wmHeadline = 'Gospodarka wodna wymaga uwagi — warto zabezpieczyć wilgoć';
     wmSummary =
@@ -622,13 +679,17 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     statusSummaryPl = `Działka ${input.parcelLabel} nie jest gruntem ornym — przerwano generowanie rekomendacji polowych.`;
   } else if (!meteoAvailable) {
     statusSummaryPl = wmSummary;
+  } else if (input.iungDrought === true) {
+    statusSummaryPl = `Na dzień ${input.analysisDate} występuje susza rolnicza: bilans KBW w okresie ${input.iungPeriodLabel} wyniósł ${input.iungKbwMm} mm i przekroczył próg ${input.iungThresholdMm} mm dla tej uprawy na glebie kat. ${input.iungCategory} (IUNG / Rozp. MRiRW).${edoLevel.poziom !== 'brak' ? ` Drabina EDO: ${edoLevel.nazwa_pl}.` : ''}${harvestFalseAlarmGuarded ? ' Spadek NDVI zignorowano jako okres żniw.' : ''}`;
+  } else if (input.iungDrought === false && edoLevel.poziom !== 'brak') {
+    statusSummaryPl = `Na dzień ${input.analysisDate} opady były niższe niż zwykle (drabina EDO: ${edoLevel.nazwa_pl}), ale bilans KBW w okresie ${input.iungPeriodLabel} (${input.iungKbwMm} mm) nie przekracza progu suszy rolniczej ${input.iungThresholdMm} mm dla tej uprawy na glebie kat. ${input.iungCategory} — brak suszy rolniczej, warto obserwować.`;
   } else if (edoLevel.poziom === 'alarm') {
     statusSummaryPl = `Na dzień ${input.analysisDate} stwierdzono poziom ALARM: łączny niedobór opadu, spadek wilgotności gleby (SMA ${input.sma.toFixed(1)}) i stres roślin potwierdzony satelitarnie.`;
   } else if (edoLevel.poziom === 'ostrzezenie') {
     statusSummaryPl = `Na dzień ${input.analysisDate} obowiązuje OSTRZEŻENIE: deficyt opadów (KBW ${input.kbwMm} mm) obniżył wilgotność gleby (SMA ${input.sma.toFixed(1)}).${harvestFalseAlarmGuarded ? ' Spadek NDVI zignorowano jako okres żniw.' : ''}`;
   } else if (edoLevel.poziom === 'obserwacja') {
     statusSummaryPl = `Na dzień ${input.analysisDate} obowiązuje OBSERWACJA: narasta niedobór opadów (SPI-3 ${input.spi3.toFixed(1)}, KBW ${input.kbwMm} mm).`;
-  } else if (input.kbwMm < -50) {
+  } else if (input.kbwMm < -50 && input.iungDrought !== false) {
     statusSummaryPl = `Na dzień ${input.analysisDate} drabina EDO (SPI/SMA) jest w normie, ale 60-dniowy bilans opad–parowanie jest ujemny (KBW ${input.kbwMm} mm) — warto obserwować wilgotność gleby.`;
   } else {
     statusSummaryPl = wmSummary;

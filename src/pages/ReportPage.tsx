@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  CloudRain,
   Copy,
   Droplets,
   FileDown,
@@ -15,7 +16,9 @@ import {
   Minus,
   Printer,
   ShieldAlert,
+  ShieldCheck,
   Sprout,
+  Sun,
   Trees
 } from 'lucide-react';
 import type { AnalyzeApiResponse, LoadingStepKey, LoadingStepState } from '../types/analysis';
@@ -138,18 +141,93 @@ function getWaterManagementStyle(level: string): {
   }
 }
 
-function getEdoPlainLabel(level: string): string {
+interface IndicatorTileStyle {
+  bg: string;
+  border: string;
+  accent: string;
+  text: string;
+}
+
+// Susza rolnicza (IUNG) — ciepła paleta: czerwień = susza, zieleń = brak suszy
+function getDroughtTileStyle(drought: boolean | null | undefined): IndicatorTileStyle {
+  if (drought === true) {
+    return {
+      bg: 'bg-[#FEE2E2]',
+      border: 'border-[#F87171]',
+      accent: 'border-l-[#DC2626]',
+      text: 'text-[#991B1B]'
+    };
+  }
+  if (drought === false) {
+    return {
+      bg: 'bg-[#ECFDF3]',
+      border: 'border-[#86D1A6]',
+      accent: 'border-l-[#16A34A]',
+      text: 'text-[#166534]'
+    };
+  }
+  return {
+    bg: 'bg-[#F6F7F5]',
+    border: 'border-[#CBD4CE]',
+    accent: 'border-l-[#94A3B8]',
+    text: 'text-[#3F4E46]'
+  };
+}
+
+// Anomalia opadów (EDO) — chłodna paleta indygo, coraz ciemniejsza z poziomem anomalii
+function getAnomalyTileStyle(level: string | null): IndicatorTileStyle {
   switch (level) {
     case 'alarm':
-      return 'Alarm suszowy';
+      return {
+        bg: 'bg-[#EDE9FE]',
+        border: 'border-[#A78BFA]',
+        accent: 'border-l-[#6D28D9]',
+        text: 'text-[#4C1D95]'
+      };
     case 'ostrzezenie':
-      return 'Ostrzeżenie przed suszą';
+      return {
+        bg: 'bg-[#E0E7FF]',
+        border: 'border-[#A5B4FC]',
+        accent: 'border-l-[#4338CA]',
+        text: 'text-[#312E81]'
+      };
     case 'obserwacja':
-      return 'Obserwacja (mniej deszczu niż zwykle)';
+      return {
+        bg: 'bg-[#EEF2FF]',
+        border: 'border-[#C7D2FE]',
+        accent: 'border-l-[#6366F1]',
+        text: 'text-[#3730A3]'
+      };
+    case 'brak':
+      return {
+        bg: 'bg-[#F1F5F9]',
+        border: 'border-[#CBD5E1]',
+        accent: 'border-l-[#64748B]',
+        text: 'text-[#334155]'
+      };
     default:
-      return 'Brak bieżącej suszy';
+      return {
+        bg: 'bg-[#F6F7F5]',
+        border: 'border-[#CBD4CE]',
+        accent: 'border-l-[#94A3B8]',
+        text: 'text-[#3F4E46]'
+      };
   }
 }
+
+function getEdoAnomalyLabel(level: string): string {
+  switch (level) {
+    case 'alarm':
+      return 'Silna anomalia: opady, gleba i rośliny';
+    case 'ostrzezenie':
+      return 'Wyraźnie mniej deszczu niż zwykle';
+    case 'obserwacja':
+      return 'Mniej deszczu niż zwykle';
+    default:
+      return 'Opady w normie';
+  }
+}
+
 
 function buildMatchedConditionPl(rule: RecommendationRule, data: AnalyzeApiResponse): string {
   const inp = data.rawInput;
@@ -463,6 +541,13 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
   const { result, parcel, inputs, series, sources } = report;
   const wm = result.waterManagement;
   const wmStyle = getWaterManagementStyle(wm.level);
+  const raw = report.rawInput;
+  const droughtStyle = getDroughtTileStyle(
+    result.meteoAvailable === false ? null : raw.iungDrought
+  );
+  const anomalyStyle = getAnomalyTileStyle(
+    result.meteoAvailable === false ? null : result.edoLevel.poziom
+  );
   const isNonArable = report.rawInput.landUse !== 'arable';
   const generatedFormatted = new Date(report.generatedAt).toLocaleString('pl-PL', {
     dateStyle: 'short',
@@ -545,6 +630,11 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                 <div className="space-y-0.5">
                   <p className="font-bold">{alert.tytul}</p>
                   <p className="text-xs leading-relaxed text-[#713F12]">{alert.tekst_dla_rolnika}</p>
+                  {alert.id === 'R16_CHMURY_BRAK_SATELITY' && inputs.ndvi?.status !== 'ok' && (
+                    <p className="text-xs leading-relaxed text-[#713F12]">
+                      Przyczyna: {inputs.ndvi?.displayValue}.
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
@@ -583,6 +673,58 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
               {wm.summaryPl}
             </p>
 
+            {!isNonArable && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div
+                  className={`rounded-lg border border-l-4 px-3.5 py-3 ${droughtStyle.bg} ${droughtStyle.border} ${droughtStyle.accent}`}
+                >
+                  <p className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${droughtStyle.text}`}>
+                    {raw.iungDrought === true ? (
+                      <Sun className="w-3.5 h-3.5" aria-hidden="true" />
+                    ) : (
+                      <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
+                    )}
+                    Susza rolnicza (progi IUNG)
+                  </p>
+                  <p className={`text-base font-bold mt-0.5 ${droughtStyle.text}`}>
+                    {result.meteoAvailable === false
+                      ? 'Nie oceniono — brak danych pogodowych'
+                      : raw.iungDrought === true
+                        ? 'TAK — zagrożenie suszą'
+                        : raw.iungDrought === false
+                          ? 'NIE — brak suszy rolniczej'
+                          : 'Nie oceniono'}
+                  </p>
+                  <p className="text-xs text-[#3F4E46] mt-0.5 leading-relaxed tabular-nums">
+                    {raw.iungDrought === true || raw.iungDrought === false
+                      ? `KBW ${raw.iungKbwMm} mm przy progu ${raw.iungThresholdMm} mm · okres ${raw.iungPeriodLabel} · gleba kat. ${raw.iungCategory}`
+                      : result.meteoAvailable === false
+                        ? 'Bez pogody nie da się porównać bilansu z progiem.'
+                        : 'Poza okresem raportowania IUNG lub uprawa/gleba nieobjęta progami.'}
+                  </p>
+                </div>
+
+                <div
+                  className={`rounded-lg border border-l-4 px-3.5 py-3 ${anomalyStyle.bg} ${anomalyStyle.border} ${anomalyStyle.accent}`}
+                >
+                  <p className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${anomalyStyle.text}`}>
+                    <CloudRain className="w-3.5 h-3.5" aria-hidden="true" />
+                    Anomalia opadów (EDO)
+                  </p>
+                  <p className={`text-base font-bold mt-0.5 ${anomalyStyle.text}`}>
+                    {result.meteoAvailable === false
+                      ? 'Nie oceniono — brak danych pogodowych'
+                      : getEdoAnomalyLabel(result.edoLevel.poziom)}
+                  </p>
+                  <p className="text-xs text-[#3F4E46] mt-0.5 leading-relaxed tabular-nums">
+                    {result.meteoAvailable === false
+                      ? 'Bez pogody nie da się porównać opadów z normą.'
+                      : `SPI-3 ${raw.spi3.toFixed(1)}${inputs.sma?.status === 'ok' ? ` · wilgotność gleby ${raw.sma.toFixed(1)}` : ''} — porównanie z normą wieloletnią, nie ocena suszy rolniczej.`}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {wm.seasonNotePl && (
               <p className="text-xs sm:text-sm text-[#3F4E46] bg-white/80 border border-[#E7CFA2] rounded-lg px-3.5 py-2.5 leading-relaxed">
                 {wm.seasonNotePl}
@@ -607,16 +749,6 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                 <strong className="font-semibold text-[#141D19]">Jak było tu w ostatnich 10 latach?</strong>{' '}
                 {report.tenYearSummaryPl}
               </p>
-              {!isNonArable && (
-                <p className="text-xs text-[#55665D]">
-                  Bieżący poziom suszy (drabina EDO na dzień {report.analysisDate}):{' '}
-                  <strong className="text-[#141D19]">
-                    {result.meteoAvailable === false
-                      ? 'Nie oceniono (brak danych pogodowych)'
-                      : getEdoPlainLabel(result.edoLevel.poziom)}
-                  </strong>
-                </p>
-              )}
             </div>
           </div>
         </div>
@@ -1098,6 +1230,7 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
           <KbwTenYearBarsChart
             bars={series.kbwCriticalWindowByYear}
             thresholdMm={series.kbwDryThresholdMm}
+            referenceLabel={series.kbwReferenceLabel}
             crop={result.crop}
           />
 

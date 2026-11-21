@@ -277,3 +277,110 @@ test('Missing weather data is reported as "not assessed", never as "no drought" 
   assert.match(result.waterManagement.headlinePl, /brak danych pogodowych/);
   assert.match(result.statusSummaryPl, /nie udało się pobrać danych pogodowych/);
 });
+
+test('No IUNG agricultural drought keeps the verdict calm even when EDO shows a precipitation anomaly', () => {
+  const result = runWaterDiagnosis({
+    ...baseInput,
+    analysisDate: '2025-07-10',
+    soilId: 'pyl_zwykly',
+    slopePct: 1.0,
+    hasSoilCover: true,
+    hasDepression: false,
+    ditchDistanceM: 200,
+    kbwMm: -165,
+    spi1: -1.4,
+    spi3: -1.4,
+    sma: -1.3,
+    depletionFraction: 0.7,
+    dryYearsLast10: 1,
+    iungDrought: false,
+    iungKbwMm: -160,
+    iungThresholdMm: -251,
+    iungPeriodLabel: '11.V–10.VII',
+    iungCategory: 'IV'
+  });
+
+  assert.notEqual(result.waterManagement.level, 'krytyczna');
+  assert.equal(result.irrigationCalc.uzasadnione, false);
+  assert.match(result.statusSummaryPl, /brak suszy rolniczej/);
+});
+
+test('IUNG agricultural drought on sand in the critical window supports irrigation', () => {
+  const result = runWaterDiagnosis({
+    ...baseInput,
+    analysisDate: '2025-06-30',
+    cropId: 'jeczmien_jary',
+    soilId: 'piasek_luzny',
+    depletionFraction: 0.9,
+    iungDrought: true,
+    iungKbwMm: -175,
+    iungThresholdMm: -142,
+    iungPeriodLabel: '1.V–30.VI',
+    iungCategory: 'I'
+  });
+
+  assert.equal(result.irrigationCalc.uzasadnione, true);
+  assert.match(result.statusSummaryPl, /susza rolnicza/);
+  const weather = result.causes.find((c) => c.domena === 'Opad i upał');
+  assert.equal(weather?.nasilenie, 'Wysokie');
+});
+
+test('Wet season on loess without drought or anomaly is reported as stable (case C, Hrubieszów 2025-07-31)', () => {
+  const result = runWaterDiagnosis({
+    ...baseInput,
+    analysisDate: '2025-07-31',
+    cropId: 'burak_cukrowy',
+    soilId: 'pyl_zwykly',
+    slopePct: 1.7,
+    hasSoilCover: true,
+    hasDepression: false,
+    ditchDistanceM: 200,
+    kbwMm: -54,
+    spi1: 0.3,
+    spi3: 0.42,
+    sma: 2.12,
+    ndvi: 0.8,
+    ndmi: 0.3,
+    ndviAnomaly: null,
+    satelliteAgeDays: 0,
+    depletionFraction: 0.52,
+    dryYearsLast10: 0,
+    iungDrought: false,
+    iungKbwMm: -57,
+    iungThresholdMm: -266,
+    iungPeriodLabel: '1.VI–31.VII',
+    iungCategory: 'IV'
+  });
+
+  assert.equal(result.edoLevel.poziom, 'brak');
+  assert.equal(result.waterManagement.level, 'stabilna');
+  assert.equal(result.irrigationCalc.uzasadnione, false);
+  assert.equal(result.causes.find((c) => c.domena === 'Opad i upał')?.nasilenie, 'Brak');
+});
+
+test('Soil cover guessed from the calendar does not add risk', () => {
+  const calm: ParcelDiagnosisInput = {
+    ...baseInput,
+    analysisDate: '2025-07-31',
+    cropId: 'burak_cukrowy',
+    soilId: 'pyl_zwykly',
+    slopePct: 1.0,
+    hasDepression: false,
+    ditchDistanceM: 9999,
+    kbwMm: -20,
+    spi1: 0,
+    spi3: 0.4,
+    sma: 1,
+    ndviAnomaly: null,
+    depletionFraction: 0.3,
+    dryYearsLast10: 0,
+    iungDrought: false,
+    iungKbwMm: -20,
+    iungThresholdMm: -266,
+    iungPeriodLabel: '1.VI–31.VII',
+    iungCategory: 'IV'
+  };
+  const guessed = runWaterDiagnosis({ ...calm, hasSoilCover: false, soilCoverEstimated: true });
+  const observed = runWaterDiagnosis({ ...calm, hasSoilCover: false, soilCoverEstimated: false });
+  assert.ok(guessed.waterManagement.score < observed.waterManagement.score);
+});

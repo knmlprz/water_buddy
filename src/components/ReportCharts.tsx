@@ -221,12 +221,14 @@ export function KbwCumulativeChart({
 interface KbwTenYearBarsChartProps {
   bars: YearlyCriticalKbwBar[];
   thresholdMm: number;
+  referenceLabel?: string;
   crop: CropParameter;
 }
 
 export function KbwTenYearBarsChart({
   bars,
   thresholdMm,
+  referenceLabel,
   crop
 }: KbwTenYearBarsChartProps) {
   if (bars.length === 0) {
@@ -259,11 +261,11 @@ export function KbwTenYearBarsChart({
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-sm font-semibold text-[#141D19]">
-          Wykres 2. KBW w oknie krytycznym ({crop.nazwa_pl}) — ostatnie 10 lat
+          Wykres 2. KBW ({crop.nazwa_pl}, {referenceLabel ?? 'okno krytyczne uprawy'}) — ostatnie 10 lat
         </h4>
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#55665D]">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 bg-[#C2410C] rounded-xs" /> Rok suchy (&lt; {thresholdMm} mm)
+            <span className="inline-block w-2.5 h-2.5 bg-[#C2410C] rounded-xs" /> Rok suchy (≤ {thresholdMm} mm)
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-2.5 h-2.5 bg-[#6E8B7D] rounded-xs" /> W normie

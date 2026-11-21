@@ -1,8 +1,8 @@
-import { SeasonScreen } from '@/screens/season'
+import { WodaScreen } from '@/screens/woda'
 import type { Metadata } from 'next'
 
-export const metadata: Metadata = { title: 'Mój sezon' }
+export const metadata: Metadata = { title: 'Woda na działce' }
 
 export default function Page() {
-  return <SeasonScreen />
+  return <WodaScreen />
 }

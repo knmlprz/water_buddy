@@ -13,7 +13,7 @@ import {
   SidebarSection,
 } from '@/components/sidebar'
 import { SidebarLayout } from '@/components/sidebar-layout'
-import { CalendarDaysIcon, ChartBarIcon, MapIcon } from '@heroicons/react/20/solid'
+import { MapIcon } from '@heroicons/react/20/solid'
 import { usePathname } from 'next/navigation'
 
 export function ApplicationLayout({ children }: { children: React.ReactNode }) {
@@ -25,7 +25,7 @@ export function ApplicationLayout({ children }: { children: React.ReactNode }) {
         <Navbar>
           <NavbarSpacer />
           <NavbarSection>
-            <span className="text-sm font-semibold text-zinc-950 dark:text-white">Field Twin</span>
+            <span className="text-sm font-semibold text-zinc-950 dark:text-white">Woda na działce</span>
           </NavbarSection>
         </Navbar>
       }
@@ -33,33 +33,25 @@ export function ApplicationLayout({ children }: { children: React.ReactNode }) {
         <Sidebar>
           <SidebarHeader>
             <SidebarItem href="/" current={pathname === '/'}>
-              <Avatar initials="FT" className="bg-emerald-600 text-white" alt="Field Twin" />
-              <SidebarLabel>Field Twin</SidebarLabel>
+              <Avatar initials="WD" className="bg-emerald-600 text-white" alt="Woda na działce" />
+              <SidebarLabel>Woda na działce</SidebarLabel>
             </SidebarItem>
           </SidebarHeader>
 
           <SidebarBody>
             <SidebarSection>
               <SidebarItem href="/" current={pathname === '/'}>
-                <ChartBarIcon />
-                <SidebarLabel>Mój sezon</SidebarLabel>
-              </SidebarItem>
-              <SidebarItem href="/dlaczego" current={pathname.startsWith('/dlaczego')}>
                 <MapIcon />
-                <SidebarLabel>Dlaczego to pole</SidebarLabel>
-              </SidebarItem>
-              <SidebarItem href="/plan" current={pathname.startsWith('/plan')}>
-                <CalendarDaysIcon />
-                <SidebarLabel>Mój płodozmian</SidebarLabel>
+                <SidebarLabel>Woda na działce</SidebarLabel>
               </SidebarItem>
             </SidebarSection>
           </SidebarBody>
 
           <SidebarFooter>
             <div className="px-2">
-              <Badge color="amber">Dane testowe</Badge>
+              <Badge color="emerald">Liczone po pobraniu</Badge>
               <p className="mt-2 text-xs/5 text-zinc-500 dark:text-zinc-400">
-                Podmień pliki w src/data. Strzałki zmieniają ekran, spacja odtwarza sezon.
+                Numer działki albo puknięcie w mapę. Wynik powstaje z danych ściągniętych w tej chwili.
               </p>
             </div>
           </SidebarFooter>

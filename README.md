@@ -1,4 +1,4 @@
-# water_buddy
+# Woda na działce
 
 Strona jest w `frontend`. Z tego katalogu, w kontenerze Jazzy (`./scripts/setup.bash jazzy`):
 
@@ -8,7 +8,7 @@ npm run dev
 
 Adres: http://localhost:3000
 
-Klawisze `1`, `2`, `3` i strzałki zmieniają ekran. Spacja na sezonie odtwarza tygodnie.
+Na stronie: numer działki albo puknięcie w mapę, uprawa, dzień z ostatnich 10 lat. Przycisk liczy niedobór wody po pobraniu danych. Druk jest w przeglądarce.
 
 Gdy brakuje katalogu `node_modules` w froncie, raz:
 

@@ -3,10 +3,10 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s · Field Twin',
-    default: 'Field Twin',
+    template: '%s · Woda na działce',
+    default: 'Woda na działce',
   },
-  description: 'Cyfrowy bliźniak gospodarstwa: sezon, przyczyna straty i plan płodozmianu.',
+  description: 'Niedobór wody na działce: obrys, uprawa, bilans w milimetrach.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

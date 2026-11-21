@@ -1,0 +1,407 @@
+{
+ "_mock": true,
+ "field": {
+  "id": "A",
+  "name": "Pole A",
+  "place": "okolice Tomaszowa Lubelskiego",
+  "crop_2026": "Fasola",
+  "area_ha": 42
+ },
+ "weeks": [
+  {
+   "date": "2026-03-02",
+   "precip_mm": 1.9,
+   "precip_norm": 10.3,
+   "sm": 0.27,
+   "sm_norm": 0.31,
+   "ndvi": 0.17,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-03-09",
+   "precip_mm": 7.4,
+   "precip_norm": 11.0,
+   "sm": 0.265,
+   "sm_norm": 0.31,
+   "ndvi": 0.162,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-03-16",
+   "precip_mm": 5.9,
+   "precip_norm": 11.6,
+   "sm": 0.271,
+   "sm_norm": 0.31,
+   "ndvi": null,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-03-23",
+   "precip_mm": 5.8,
+   "precip_norm": 12.2,
+   "sm": 0.273,
+   "sm_norm": 0.31,
+   "ndvi": 0.178,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-03-30",
+   "precip_mm": 7.8,
+   "precip_norm": 12.8,
+   "sm": 0.27,
+   "sm_norm": 0.31,
+   "ndvi": 0.162,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-04-06",
+   "precip_mm": 6.9,
+   "precip_norm": 13.4,
+   "sm": 0.26,
+   "sm_norm": 0.309,
+   "ndvi": 0.18,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-04-13",
+   "precip_mm": 5.7,
+   "precip_norm": 13.9,
+   "sm": 0.262,
+   "sm_norm": 0.308,
+   "ndvi": null,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-04-20",
+   "precip_mm": 8.1,
+   "precip_norm": 14.4,
+   "sm": 0.247,
+   "sm_norm": 0.305,
+   "ndvi": 0.163,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-04-27",
+   "precip_mm": 6.1,
+   "precip_norm": 14.9,
+   "sm": 0.246,
+   "sm_norm": 0.301,
+   "ndvi": 0.179,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-05-04",
+   "precip_mm": 6.4,
+   "precip_norm": 15.3,
+   "sm": 0.23,
+   "sm_norm": 0.297,
+   "ndvi": 0.157,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-05-11",
+   "precip_mm": 2.9,
+   "precip_norm": 15.7,
+   "sm": 0.219,
+   "sm_norm": 0.292,
+   "ndvi": 0.164,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-05-18",
+   "precip_mm": 3.6,
+   "precip_norm": 16.0,
+   "sm": 0.21,
+   "sm_norm": 0.286,
+   "ndvi": null,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-05-25",
+   "precip_mm": 4.4,
+   "precip_norm": 16.3,
+   "sm": 0.187,
+   "sm_norm": 0.28,
+   "ndvi": 0.176,
+   "ndvi_norm": 0.17,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-06-01",
+   "precip_mm": 3.2,
+   "precip_norm": 16.6,
+   "sm": 0.179,
+   "sm_norm": 0.274,
+   "ndvi": 0.201,
+   "ndvi_norm": 0.203,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-06-08",
+   "precip_mm": 4.5,
+   "precip_norm": 16.8,
+   "sm": 0.167,
+   "sm_norm": 0.268,
+   "ndvi": 0.275,
+   "ndvi_norm": 0.289,
+   "bare_soil": false
+  },
+  {
+   "date": "2026-06-15",
+   "precip_mm": 24.0,
+   "precip_norm": 16.9,
+   "sm": 0.178,
+   "sm_norm": 0.261,
+   "ndvi": 0.387,
+   "ndvi_norm": 0.406,
+   "bare_soil": false
+  },
+  {
+   "date": "2026-06-22",
+   "precip_mm": 4.0,
+   "precip_norm": 17.0,
+   "sm": 0.149,
+   "sm_norm": 0.255,
+   "ndvi": 0.458,
+   "ndvi_norm": 0.534,
+   "bare_soil": false
+  },
+  {
+   "date": "2026-06-29",
+   "precip_mm": 3.6,
+   "precip_norm": 17.0,
+   "sm": 0.14,
+   "sm_norm": 0.249,
+   "ndvi": 0.499,
+   "ndvi_norm": 0.651,
+   "bare_soil": false
+  },
+  {
+   "date": "2026-07-06",
+   "precip_mm": 4.2,
+   "precip_norm": 17.0,
+   "sm": 0.121,
+   "sm_norm": 0.243,
+   "ndvi": 0.442,
+   "ndvi_norm": 0.737,
+   "bare_soil": false
+  },
+  {
+   "date": "2026-07-13",
+   "precip_mm": 1.8,
+   "precip_norm": 16.9,
+   "sm": 0.115,
+   "sm_norm": 0.238,
+   "ndvi": 0.346,
+   "ndvi_norm": 0.77,
+   "bare_soil": false
+  },
+  {
+   "date": "2026-07-20",
+   "precip_mm": 6.4,
+   "precip_norm": 16.8,
+   "sm": 0.112,
+   "sm_norm": 0.234,
+   "ndvi": 0.234,
+   "ndvi_norm": 0.77,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-07-27",
+   "precip_mm": 3.8,
+   "precip_norm": 16.6,
+   "sm": 0.115,
+   "sm_norm": 0.23,
+   "ndvi": 0.172,
+   "ndvi_norm": 0.77,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-08-03",
+   "precip_mm": 6.2,
+   "precip_norm": 16.3,
+   "sm": 0.117,
+   "sm_norm": 0.227,
+   "ndvi": 0.179,
+   "ndvi_norm": 0.77,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-08-10",
+   "precip_mm": 3.7,
+   "precip_norm": 16.0,
+   "sm": 0.12,
+   "sm_norm": 0.226,
+   "ndvi": 0.195,
+   "ndvi_norm": 0.713,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-08-17",
+   "precip_mm": 4.0,
+   "precip_norm": 15.7,
+   "sm": 0.116,
+   "sm_norm": 0.225,
+   "ndvi": 0.185,
+   "ndvi_norm": 0.576,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-08-24",
+   "precip_mm": 2.6,
+   "precip_norm": 15.3,
+   "sm": 0.119,
+   "sm_norm": 0.225,
+   "ndvi": 0.18,
+   "ndvi_norm": 0.414,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-08-31",
+   "precip_mm": 3.5,
+   "precip_norm": 14.9,
+   "sm": 0.12,
+   "sm_norm": 0.225,
+   "ndvi": 0.178,
+   "ndvi_norm": 0.277,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-09-07",
+   "precip_mm": 2.4,
+   "precip_norm": 14.4,
+   "sm": 0.112,
+   "sm_norm": 0.225,
+   "ndvi": 0.166,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-09-14",
+   "precip_mm": 11.9,
+   "precip_norm": 13.9,
+   "sm": 0.114,
+   "sm_norm": 0.227,
+   "ndvi": 0.181,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-09-21",
+   "precip_mm": 14.1,
+   "precip_norm": 13.4,
+   "sm": 0.115,
+   "sm_norm": 0.233,
+   "ndvi": null,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-09-28",
+   "precip_mm": 12.8,
+   "precip_norm": 12.8,
+   "sm": 0.128,
+   "sm_norm": 0.241,
+   "ndvi": 0.182,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-10-05",
+   "precip_mm": 12.2,
+   "precip_norm": 12.2,
+   "sm": 0.13,
+   "sm_norm": 0.249,
+   "ndvi": null,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-10-12",
+   "precip_mm": 10.6,
+   "precip_norm": 11.6,
+   "sm": 0.144,
+   "sm_norm": 0.257,
+   "ndvi": 0.18,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-10-19",
+   "precip_mm": 11.8,
+   "precip_norm": 11.0,
+   "sm": 0.153,
+   "sm_norm": 0.263,
+   "ndvi": 0.19,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  },
+  {
+   "date": "2026-10-26",
+   "precip_mm": 5.6,
+   "precip_norm": 10.3,
+   "sm": 0.147,
+   "sm_norm": 0.265,
+   "ndvi": 0.18,
+   "ndvi_norm": 0.22,
+   "bare_soil": true
+  }
+ ],
+ "events": [
+  {
+   "date": "2026-04-20",
+   "type": "frost",
+   "label": "Przymrozek do −10°C"
+  },
+  {
+   "date": "2026-05-18",
+   "type": "sowing",
+   "label": "Siew fasoli"
+  },
+  {
+   "date": "2026-06-15",
+   "type": "hail",
+   "label": "Burza z gradem"
+  },
+  {
+   "date": "2026-06-29",
+   "type": "loss_start",
+   "label": "Początek straty"
+  },
+  {
+   "date": "2026-08-10",
+   "type": "loss_end",
+   "label": "Plon prawie zerowy"
+  }
+ ],
+ "kpi": {
+  "label": "Zieloność pola w lipcu w porównaniu ze średnią lat 2016–2025",
+  "value": -62,
+  "unit": "%",
+  "mock": true
+ },
+ "region_kpi": {
+  "label": "Klimatyczny bilans wodny, woj. lubelskie",
+  "value": -226,
+  "unit": "mm",
+  "source": "Tygodnik Rolniczy, 2026",
+  "mock": false
+ },
+ "official": {
+  "label": "Aplikacja suszowa",
+  "value": 11,
+  "unit": "%"
+ }
+}

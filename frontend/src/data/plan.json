@@ -1,0 +1,148 @@
+{
+ "_mock": true,
+ "years": [
+  2026,
+  2027,
+  2028,
+  2029
+ ],
+ "rows": [
+  {
+   "field": "A",
+   "label": "Pole A",
+   "note": "najsuchsze, lżejsza gleba",
+   "crops": [
+    "Fasola",
+    "Uprawa o mniejszym zapotrzebowaniu na wodę",
+    "Zboże",
+    "Fasola wraca po przerwie"
+   ],
+   "crop_kind": [
+    "loss",
+    "dry",
+    "cereal",
+    "legume"
+   ],
+   "winters": [
+    false,
+    true,
+    true
+   ],
+   "effect": "Gleba okryta zimą: mniej parowania i odpływu",
+   "bare_days_now": 315,
+   "bare_days_plan": 120
+  },
+  {
+   "field": "B",
+   "label": "Pole B",
+   "note": "średnie",
+   "crops": [
+    "Rzepak, zaorany po suszy",
+    "Zboże jare",
+    "Bobowata",
+    "Rzepak wraca"
+   ],
+   "crop_kind": [
+    "loss",
+    "cereal",
+    "legume",
+    "oilseed"
+   ],
+   "winters": [
+    false,
+    true,
+    false
+   ],
+   "effect": "Bobowata wiąże azot, międzyplon chroni glebę",
+   "bare_days_now": 224,
+   "bare_days_plan": 110
+  },
+  {
+   "field": "C",
+   "label": "Pole C",
+   "note": "najlepiej trzyma wodę",
+   "crops": [
+    "Zboże, mniejsza strata",
+    "Fasola przeniesiona z pola A",
+    "Zboże",
+    "Bobowata"
+   ],
+   "crop_kind": [
+    "cereal",
+    "legume",
+    "cereal",
+    "legume"
+   ],
+   "winters": [
+    false,
+    false,
+    true
+   ],
+   "effect": "Uprawa wrażliwa trafia tam, gdzie woda zostaje",
+   "bare_days_now": 42,
+   "bare_days_plan": 35
+  }
+ ],
+ "steps": [
+  {
+   "id": "cover",
+   "title": "Międzyplony ozime",
+   "when": "Po żniwach 2027 i 2028",
+   "water": "Okryta gleba, mniej parowania i odpływu",
+   "water_mm": 25,
+   "water_mock": true,
+   "cost_zl_ha": 260,
+   "cost_mock": true,
+   "subsidy_zl_ha": 437.6,
+   "subsidy_note": "Ekoschemat, kampania 2025",
+   "saving_zl_ha": [
+    250,
+    400
+   ],
+   "saving_note": "Mniej nawozów azotowych",
+   "bio": true
+  },
+  {
+   "id": "sluice",
+   "title": "Zastawki na rowach: zatrzymanie wody z roztopów",
+   "when": "Zima 2026/27",
+   "water": "Więcej wody w glebie na starcie wiosny",
+   "water_mm": 15,
+   "water_mock": true,
+   "cost_label": "Niski",
+   "subsidy_label": "Brak dopłaty",
+   "caveat": "Może wymagać uzgodnienia ze spółką wodną lub Wodami Polskimi",
+   "bio": false
+  },
+  {
+   "id": "notill",
+   "title": "Uprawa uproszczona zamiast orki na polu A",
+   "when": "Od 2027",
+   "water": "Mniej parowania, więcej materii organicznej",
+   "water_mock": true,
+   "cost_label": "Zależny od sprzętu",
+   "subsidy_label": "Rolnictwo węglowe: 4 pkt/ha",
+   "bio": false
+  },
+  {
+   "id": "strip",
+   "title": "Pas kwitnący na skraju pola",
+   "when": "Wiosna 2027",
+   "water": "Mniej erozji na skraju pola",
+   "cost_zl_ha": 90,
+   "cost_mock": true,
+   "subsidy_label": "Ekoschemat: obszary z roślinami miododajnymi (stawka do sprawdzenia)",
+   "bio": true
+  },
+  {
+   "id": "retention",
+   "title": "Zbiornik retencyjny",
+   "when": "2028",
+   "water": "Zapas wody na suche tygodnie",
+   "cost_label": "Wysoki",
+   "subsidy_label": "Finansowanie niepewne",
+   "caveat": "Nabór ARiMR przekroczył alokację, kolejne nie są planowane",
+   "bio": true
+  }
+ ]
+}

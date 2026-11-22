@@ -52,7 +52,7 @@ export function MethodologyPage({ activeTab, onSelectTab }: MethodologyPageProps
             </h1>
             <p className="text-sm text-[#55665D] mt-0.5">
               Tutaj możesz sprawdzić wszystkie tabele upraw, progi wilgotności, reguły doradcze oraz
-              listę publicznych źródeł danych, z których korzysta WodaPol.
+              listę publicznych źródeł danych, z których korzysta Water Buddy.
             </p>
           </div>
           <button

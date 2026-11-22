@@ -1,8 +1,8 @@
-# WodaPol (Water Buddy) — Doradca gospodarki wodnej i retencji dla rolników
+# Water Buddy — doradca gospodarki wodnej i retencji dla rolników
 
 **HackNation 2026 · Wyzwanie KOWR**
 
-WodaPol (Water Buddy) to aplikacja webowa dla rolników i doradców rolniczych, która na podstawie numeru działki ewidencyjnej (TERYT) lub kliknięcia na mapie Polski, wybranej uprawy oraz daty analizy (dziś lub dowolny dzień z ostatnich 10 lat) oblicza na żywo stan wody na konkretnej działce, diagnozuje przyczyny niedoboru lub odpływu wody i przedstawia konkretne rekomendacje w kolejności wymaganej przez KOWR: **stan wody → przyczyny → retencja krajobrazowa → agrotechnika glebowa → nawadnianie (opcjonalnie)**.
+Water Buddy (roboczo: WodaPol) to aplikacja webowa dla rolników i doradców rolniczych, która na podstawie numeru działki ewidencyjnej (TERYT) lub kliknięcia na mapie Polski, wybranej uprawy oraz daty analizy (dziś lub dowolny dzień z ostatnich 10 lat) oblicza na żywo stan wody na konkretnej działce, diagnozuje przyczyny niedoboru lub odpływu wody i przedstawia konkretne rekomendacje w kolejności wymaganej przez KOWR: **stan wody → przyczyny → retencja krajobrazowa → agrotechnika glebowa → nawadnianie (opcjonalnie)**.
 
 ---
 
@@ -156,7 +156,8 @@ Wszystkie źródła spełniają wymogi 5 kategorii KOWR (przestrzenne, meteorolo
 | Satelitarne | **Earth Search STAC v1 — Sentinel-2 L2A (COG)** | Element 84 / ESA Copernicus | **Tak** (2017–dziś pełne L2A) | 10 m (`B04`, `B08`), 20 m (`B11`, `SCL`) | Maska chmur `SCL` (klasy 4 i 5), mediana NDVI, NDMI, okrywa gleby, wieloletnia anomalia NDVI |
 | Glebowe | **IUNG-PIB GeoServer** (`Susza:katgl_landuse2024`) + **SoilGrids v2.0** (fallback) | IUNG-PIB Puławy / ISRIC | Mapa kategorii gleb 2024 (stała) | Skala 1:25 000 (IUNG) / 250 m (SoilGrids) | Kategoria podatności gleby (I–IV) mapowana na retencję 0–50 cm (CDR tab. 12) |
 | Hydrologiczne | **BDOT10k WMS 1.3.0** (`kompozycja_BDOT10k_WMS`) | GUGiK (PZGIK) | Stan aktualny | Skala 1:10 000 | Rowy melioracyjne (`SWRM`), kanały (`SWKN`), cieki (`SWRS`), zbiorniki (`PTWP`), mokradła (`OIMK`) w 250/500 m oraz pokrycie terenu |
-| Tło suszowe | **Copernicus EDO WMS** (`cdiad`, `smian`, `spaST`) | Komisja Europejska JRC | **Tak** (archiwum dekadowe z `TIME=`) | 5 km / 0,1° | Metodyka drabiny CDI (Obserwacja → Ostrzeżenie → Alarm) i weryfikacja spójności |
+| Tło suszowe | **Copernicus EDO** — tylko metodyka (nie pobierane w analizie) | Komisja Europejska JRC | — | — | Drabina CDI (Obserwacja → Ostrzeżenie → Alarm) jest liczona lokalnie z ERA5 (SPI-1/3, anomalia wilgotności gleby) i NDVI; usługa EDO WMS jest dostępna tylko w weryfikatorze API na stronie `/metodyka` |
+| Progi suszy rolniczej | **IUNG-PIB SMSR** — tabela progów KBW (Rozp. MRiRW 2019) | IUNG-PIB Puławy | Tabela statyczna (`src/data/iungThresholds.ts`) | gatunek × kat. gleby I–IV × 14 okresów | Werdykt „susza rolnicza TAK/NIE” dla działki |
 
 Dodatkowo jako podkład kartograficzny w przeglądarce używane są: **OpenStreetMap** oraz **GUGiK Ortofotomapa StandardResolution (WMTS)**.
 

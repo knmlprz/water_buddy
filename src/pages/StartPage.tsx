@@ -592,7 +592,7 @@ export function StartPage({ onStartReport }: StartPageProps) {
         </div>
       </form>
 
-      {/* Plain-Language Visual Guide: How WodaPol Works */}
+      {/* Plain-Language Visual Guide: How Water Buddy Works */}
       <section className="max-w-[1040px] mx-auto pt-4 space-y-5">
         <div className="max-w-2xl space-y-1">
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#141D19]">

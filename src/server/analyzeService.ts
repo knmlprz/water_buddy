@@ -9,10 +9,12 @@ import { runWaterDiagnosis, type LandUseType, type ParcelDiagnosisInput } from '
 import {
   analyzeMeteoHistory,
   computePolygonGeometry,
+  computeDownslopeDirection,
   computeSlopeAndDepression,
   median,
   parseWktOuterRing,
-  type DailyMeteoRecord
+  type DailyMeteoRecord,
+  type DownslopeEstimate
 } from '../engine/climateStats';
 import type {
   AnalysisSourceAttribution,
@@ -239,6 +241,7 @@ interface TerrainFetchResult {
   slopePct: number;
   hasDepression: boolean;
   centerElevM: number | null;
+  downslope: DownslopeEstimate | null;
   status: FieldStatus;
   sampledCount: number;
   durationMs: number;
@@ -295,6 +298,7 @@ async function fetchTerrainFromNmt(centroid: [number, number]): Promise<TerrainF
       slopePct: 0,
       hasDepression: false,
       centerElevM: null,
+      downslope: null,
       status: 'brak',
       sampledCount,
       durationMs: Date.now() - started
@@ -308,10 +312,23 @@ async function fetchTerrainFromNmt(centroid: [number, number]): Promise<TerrainF
     innerStepM: innerStep
   });
 
+  const diagM = Math.round(outerStep * Math.SQRT2);
+  const downslope = computeDownslopeDirection(centerElevM, [
+    { elevM: results[1], directionPl: 'północ', distanceM: innerStep },
+    { elevM: results[2], directionPl: 'południe', distanceM: innerStep },
+    { elevM: results[3], directionPl: 'wschód', distanceM: innerStep },
+    { elevM: results[4], directionPl: 'zachód', distanceM: innerStep },
+    { elevM: results[5], directionPl: 'północny wschód', distanceM: diagM },
+    { elevM: results[6], directionPl: 'północny zachód', distanceM: diagM },
+    { elevM: results[7], directionPl: 'południowy wschód', distanceM: diagM },
+    { elevM: results[8], directionPl: 'południowy zachód', distanceM: diagM }
+  ]);
+
   return {
     slopePct: computed.slopePct,
     hasDepression: computed.hasDepression,
     centerElevM: Number(centerElevM.toFixed(1)),
+    downslope,
     status: 'ok',
     sampledCount,
     durationMs: Date.now() - started
@@ -1137,11 +1154,21 @@ async function fetchSentinel2Data(
     b.properties.datetime.localeCompare(a.properties.datetime)
   );
 
-  // Pick the 2 latest scenes within 30 days (fewer parallel COG streams on slow links)
-  // + up to 2 earlier in season for the chart
-  const recentCandidates = sortedDesc
-    .filter((f) => diffDaysIso(analysisDate, f.properties.datetime.slice(0, 10)) <= 30)
-    .slice(0, 2);
+  // Candidates within 30 days: the 2 latest scenes plus the newest nearly cloud-free one
+  // (scene-level cloud cover says little about the parcel, so the newest scenes are often
+  // cloudy right over it) + up to 2 earlier in season for the chart
+  const withinMonth = sortedDesc.filter(
+    (f) => diffDaysIso(analysisDate, f.properties.datetime.slice(0, 10)) <= 30
+  );
+  const clearest =
+    withinMonth.find((f) => (f.properties['eo:cloud_cover'] ?? 100) < 15) ??
+    [...withinMonth].sort(
+      (a, b) => (a.properties['eo:cloud_cover'] ?? 100) - (b.properties['eo:cloud_cover'] ?? 100)
+    )[0];
+  const recentCandidates = withinMonth.slice(0, 2);
+  if (clearest && !recentCandidates.includes(clearest)) {
+    recentCandidates.push(clearest);
+  }
   const olderCandidates = sortedDesc
     .filter((f) => diffDaysIso(analysisDate, f.properties.datetime.slice(0, 10)) > 30)
     .slice(0, 2);
@@ -1664,6 +1691,19 @@ export async function runFullParcelAnalysis(
       dataDate: 'NMT 1 m',
       status: terrain.status
     },
+    downslope: {
+      key: 'downslope',
+      label: 'Kierunek spływu wody (wokół środka działki)',
+      value: terrain.downslope?.directionPl ?? null,
+      displayValue: !terrain.downslope
+        ? 'brak danych'
+        : terrain.downslope.directionPl
+          ? `teren opada na ${terrain.downslope.directionPl} (ok. ${terrain.downslope.dropPct}% na pierwszych ~35–90 m)`
+          : 'teren praktycznie płaski — brak wyraźnego kierunku spływu',
+      source: 'GUGiK NMT 1 m (największy spadek wśród 8 punktów wokół środka działki)',
+      dataDate: 'NMT 1 m',
+      status: terrain.downslope ? 'ok' : 'brak'
+    },
     hasSoilCover: {
       key: 'hasSoilCover',
       label: 'Okrywa roślinna gleby',
@@ -1769,7 +1809,7 @@ export async function runFullParcelAnalysis(
       dataDate: s2.latestSceneDate ?? (s2.failureReason ?? 'brak bezchmurnej sceny'),
       fetchedAt: generatedAt,
       status: s2.status,
-      license: 'Contains modified Copernicus Sentinel data 2026 (bezpłatne i otwarte)'
+      license: `Contains modified Copernicus Sentinel data${s2.latestSceneDate ? ` ${s2.latestSceneDate.slice(0, 4)}` : ''} (bezpłatne i otwarte)`
     },
     {
       name: 'GUGiK NMT 1 m (Numeryczny Model Terenu)',

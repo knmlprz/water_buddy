@@ -105,7 +105,7 @@ export default function App() {
         <div className="max-w-[1160px] mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#55665D]">
           <div>
             <p className="font-semibold text-[#141D19]">
-              WodaPol · Prosty doradca wody i retencji dla rolników
+              Water Buddy · Prosty doradca wody i retencji dla rolników
             </p>
             <p className="mt-0.5">
               Korzystamy wyłącznie z bezpłatnych, publicznych danych pogodowych, satelitarnych i

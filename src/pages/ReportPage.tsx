@@ -24,6 +24,12 @@ import {
 import type { AnalyzeApiResponse, LoadingStepKey, LoadingStepState } from '../types/analysis';
 import type { RecommendationRule } from '../data/rules';
 import { LIMITATIONS_DATA } from '../data/limitations';
+import { describeDitchRadius } from '../engine/waterBrain';
+import {
+  findOdrForVoivodeship,
+  RULE_SUPPORT_HINTS,
+  SUPPORT_DISCLAIMER_PL
+} from '../data/supportPrograms';
 import { ParcelMap } from '../components/ParcelMap';
 import { MediaImage } from '../components/MediaImage';
 import {
@@ -215,6 +221,26 @@ function getAnomalyTileStyle(level: string | null): IndicatorTileStyle {
   }
 }
 
+const WM_LEVEL_LABELS: Record<string, string> = {
+  krytyczna: 'trudna sytuacja',
+  podwyzszone_ryzyko: 'podwyższone ryzyko',
+  wymaga_uwagi: 'wymaga uwagi',
+  stabilna: 'stabilna',
+  poza_rolnictwem: 'poza rolnictwem'
+};
+
+// Neutralne tytuły kart przyczyn: "Słaba retencja gleby — bez problemu" brzmiało sprzecznie
+const CAUSE_CARD_TITLES: Record<string, string> = {
+  'Opad i upał': 'Opady i parowanie',
+  'Słaba retencja gleby': 'Retencja gleby',
+  'Spływ powierzchniowy': 'Odpływ wody z pola',
+  'Wrażliwa uprawa': 'Wrażliwość uprawy'
+};
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function getEdoAnomalyLabel(level: string): string {
   switch (level) {
     case 'alarm':
@@ -235,7 +261,7 @@ function buildMatchedConditionPl(rule: RecommendationRule, data: AnalyzeApiRespo
     case 'R04_STOK_BEZ_OKRYWY_KBW':
       return `Nachylenie terenu wynosi ${inp.slopePct.toFixed(1)}%, gleba nie jest osłonięta roślinnością, a parowanie przewyższa opady (${inp.kbwMm} mm).`;
     case 'R05_ROW_MELIORACYJNY_ZASTAWKA':
-      return `W promieniu ok. ${inp.ditchDistanceM} m od pola znajduje się rów melioracyjny lub ciek, a bilans wody jest ujemny (${inp.kbwMm} mm).`;
+      return `${capitalize(describeDitchRadius(inp.ditchDistanceM))} znajduje się rów melioracyjny lub ciek (BDOT10k), a bilans wody jest ujemny (${inp.kbwMm} mm).`;
     case 'R06_ZAGLEBIENIE_OCZKO_WODNE':
       return `Na działce widać naturalne zagłębienie terenu, a w ${inp.dryYearsLast10} z ostatnich 10 lat było tu sucho.`;
     case 'R07_ZADRZEWIENIA_WIATROCHRONNE':
@@ -253,7 +279,7 @@ function buildMatchedConditionPl(rule: RecommendationRule, data: AnalyzeApiRespo
     case 'R15_NDMI_STRES_UKRYTY':
       return `Rośliny z satelity są jeszcze zielone, ale wskaźnik uwodnienia liści spadł poniżej zera (wczesny sygnał stresu).`;
     case 'R17_ODPLYW_JESIEN_ZIMA_ROW':
-      return `W odległości ok. ${inp.ditchDistanceM} m wykryto rów melioracyjny lub ciek — w okresie odbudowy wilgoci warto pilnować, by nie odwadniał pola zbyt szybko.`;
+      return `${capitalize(describeDitchRadius(inp.ditchDistanceM))} wykryto rów melioracyjny lub ciek (BDOT10k) — w okresie odbudowy wilgoci warto pilnować, by nie odwadniał pola zbyt szybko.`;
     case 'R18_ZASTOINY_NADMIAR_WODY':
       return `Bilans opadów jest mocno dodatni (+${inp.kbwMm} mm), a gleba (${data.result.soil.grupa_uziarnienia}) lub zagłębienie terenu sprzyjają okresowemu podmoknięciu.`;
     case 'R19_OKRYWA_ZIMOWA_ODBUDOWA':
@@ -304,6 +330,13 @@ function RecommendationCard({
         {buildMatchedConditionPl(rule, data)}
       </p>
 
+      {RULE_SUPPORT_HINTS[rule.id] && (
+        <p className="text-xs text-[#4A3B0B] bg-[#FFFBEB] border border-[#F2DFA7] px-3.5 py-2.5 rounded-lg leading-relaxed">
+          <span className="font-semibold">Wsparcie finansowe / formalności:</span>{' '}
+          {RULE_SUPPORT_HINTS[rule.id].programPl} {SUPPORT_DISCLAIMER_PL}
+        </p>
+      )}
+
       <details className="report-details group text-xs text-[#4A5A52]">
         <summary className="list-none inline-flex items-center gap-1.5 font-semibold text-[#1B5E4A] hover:underline cursor-pointer select-none">
           <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
@@ -326,6 +359,26 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  // Zwinięte <details> (wykresy z 10 lat, uzasadnienia) nie drukują się, a CSS nie umie ich
+  // otworzyć — rozwijamy je na czas druku / zapisu PDF i przywracamy stan po wydruku.
+  useEffect(() => {
+    let reopened: HTMLDetailsElement[] = [];
+    const openAll = () => {
+      reopened = Array.from(document.querySelectorAll('details')).filter((d) => !d.open);
+      reopened.forEach((d) => (d.open = true));
+    };
+    const restore = () => {
+      reopened.forEach((d) => (d.open = false));
+      reopened = [];
+    };
+    window.addEventListener('beforeprint', openAll);
+    window.addEventListener('afterprint', restore);
+    return () => {
+      window.removeEventListener('beforeprint', openAll);
+      window.removeEventListener('afterprint', restore);
+    };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(queryString);
@@ -542,6 +595,9 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
   const wm = result.waterManagement;
   const wmStyle = getWaterManagementStyle(wm.level);
   const raw = report.rawInput;
+  const odrName = findOdrForVoivodeship(parcel.voivodeship);
+  const analysisMmDd = report.analysisDate.slice(5, 10);
+  const outsideIungSeason = analysisMmDd < '05-20' || analysisMmDd > '10-10';
   const droughtStyle = getDroughtTileStyle(
     result.meteoAvailable === false ? null : raw.iungDrought
   );
@@ -569,7 +625,9 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
     taw_mm > 0 ? Math.min(100, Math.round((aktualny_deficyt_mm / taw_mm) * 100)) : 0;
 
   // Plain-language 3-tile overview metrics
-  const kbwVal = report.rawInput.kbwMm;
+  // Jedna główna liczba KBW: okres IUNG (porównywalny z progiem suszy), a gdy go brak — 60 dni
+  const kbwFromIung = typeof report.rawInput.iungKbwMm === 'number';
+  const kbwVal = kbwFromIung ? (report.rawInput.iungKbwMm as number) : report.rawInput.kbwMm;
   const kbwExplain =
     kbwVal < -100
       ? 'Duża przewaga parowania nad deszczem'
@@ -584,16 +642,25 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
   const soilMoistureText = !smaAvailable
     ? 'Brak odczytu'
     : smaVal < -1.0
-      ? 'Wyraźnie za sucho'
+      ? 'Suchsza niż zwykle'
       : smaVal < -0.3
         ? 'Lekko poniżej normy'
-        : 'W normie';
+        : smaVal > 1.0
+          ? 'Wilgotniejsza niż zwykle'
+          : 'W normie';
 
   const ndviVal = report.rawInput.ndvi;
+  const ndviCrop = result.ndviCropAssessment;
   const ndviSummaryText =
     ndviVal === null
       ? 'Brak zdjęcia'
-      : ndviVal >= 0.6
+      : ndviCrop?.status === 'typowa'
+        ? `Typowa dla uprawy (${ndviVal.toFixed(2)})`
+        : ndviCrop?.status === 'ponizej'
+          ? `Nieco poniżej typowej (${ndviVal.toFixed(2)})`
+          : ndviCrop?.status === 'wyraznie_ponizej'
+            ? `Wyraźnie poniżej typowej (${ndviVal.toFixed(2)})`
+            : ndviVal >= 0.6
         ? `Gęsta zieleń (${ndviVal.toFixed(2)})`
         : ndviVal >= 0.4
           ? `Umiarkowana (${ndviVal.toFixed(2)})`
@@ -662,9 +729,15 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
               <p className={`text-sm sm:text-base font-bold ${wmStyle.text}`}>
                 {wm.headlinePl}
               </p>
+              {/* Klasa oceny + liczba czynników zamiast punktów 0–100 (suma wag ustalonych
+                  ręcznie dawałaby pozorną precyzję) */}
               {!isNonArable && (
-                <span className="text-xs font-medium text-[#4A5A52] tabular-nums">
-                  Wskaźnik ryzyka wodnego: <strong className="text-[#141D19]">{wm.score}/100</strong>
+                <span className="text-xs font-medium text-[#4A5A52]">
+                  Ocena: <strong className="text-[#141D19]">{WM_LEVEL_LABELS[wm.level] ?? wm.level}</strong>
+                  {' · '}
+                  {wm.keyRisksPl.length === 0
+                    ? 'bez istotnych czynników ryzyka'
+                    : `${wm.keyRisksPl.length} ${wm.keyRisksPl.length === 1 ? 'czynnik' : wm.keyRisksPl.length < 5 ? 'czynniki' : 'czynników'} ryzyka`}
                 </span>
               )}
             </div>
@@ -693,14 +766,18 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                         ? 'TAK — zagrożenie suszą'
                         : raw.iungDrought === false
                           ? 'NIE — brak suszy rolniczej'
-                          : 'Nie oceniono'}
+                          : outsideIungSeason
+                            ? 'Poza sezonem — nie oceniamy'
+                            : 'Nie oceniono'}
                   </p>
                   <p className="text-xs text-[#3F4E46] mt-0.5 leading-relaxed tabular-nums">
                     {raw.iungDrought === true || raw.iungDrought === false
                       ? `KBW ${raw.iungKbwMm} mm przy progu ${raw.iungThresholdMm} mm · okres ${raw.iungPeriodLabel} · gleba kat. ${raw.iungCategory}`
                       : result.meteoAvailable === false
                         ? 'Bez pogody nie da się porównać bilansu z progiem.'
-                        : 'Poza okresem raportowania IUNG lub uprawa/gleba nieobjęta progami.'}
+                        : outsideIungSeason
+                          ? 'IUNG ocenia suszę rolniczą od 20 maja (koniec pierwszego okresu 21.III–20.V) do 30 września. Poza sezonem liczą się retencja i przygotowanie pola.'
+                          : 'Ta uprawa lub kategoria gleby nie jest objęta progami IUNG w tym okresie.'}
                   </p>
                 </div>
 
@@ -734,7 +811,7 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
             {!isNonArable && wm.keyRisksPl.length > 0 && (
               <div className="space-y-1.5 pt-1">
                 <p className="text-xs font-semibold text-[#141D19]">
-                  Na co szczególnie zwrócić uwagę na tej działce:
+                  Z czego wynika ta ocena:
                 </p>
                 <ul className="space-y-1 text-xs sm:text-sm text-[#24322B] list-disc pl-5 leading-relaxed">
                   {wm.keyRisksPl.map((risk) => (
@@ -774,7 +851,11 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
         {!isNonArable && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3.5 rounded-xl bg-white border border-[#DCE2DD]">
-              <p className="text-xs text-[#55665D]">Deszcz a parowanie (60 dni)</p>
+              <p className="text-xs text-[#55665D]">
+                {kbwFromIung
+                  ? `Deszcz a parowanie (okres IUNG ${raw.iungPeriodLabel})`
+                  : 'Deszcz a parowanie (60 dni)'}
+              </p>
               <p className="text-lg font-bold font-mono tabular-nums text-[#141D19] mt-0.5">
                 {inputs.kbwMm?.status === 'ok'
                   ? `${kbwVal > 0 ? `+${kbwVal}` : kbwVal} mm`
@@ -782,13 +863,15 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
               </p>
               <p className="text-xs text-[#55665D] mt-0.5">
                 {inputs.kbwMm?.status === 'ok'
-                  ? kbwExplain
+                  ? kbwFromIung
+                    ? `${kbwExplain} · ostatnie 60 dni: ${raw.kbwMm} mm`
+                    : kbwExplain
                   : 'Brak pełnych danych pogodowych z 60 dni'}
               </p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-white border border-[#DCE2DD]">
-              <p className="text-xs text-[#55665D]">Wilgotność w glebie</p>
+              <p className="text-xs text-[#55665D]">Wilgotność gleby (względem normy)</p>
               <p className="text-lg font-bold text-[#141D19] mt-0.5">{soilMoistureText}</p>
               <p className="text-xs text-[#55665D] mt-0.5">
                 Gleba: {result.soil.grupa_uziarnienia}
@@ -806,6 +889,9 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                   ? `Zdjęcie z dnia ${inputs.ndvi.dataDate}`
                   : 'Brak bezchmurnego zdjęcia satelitarnego'}
               </p>
+              {ndviVal !== null && ndviCrop && (
+                <p className="text-[11px] text-[#55665D] mt-1 leading-snug">{ndviCrop.textPl}</p>
+              )}
             </div>
           </div>
         )}
@@ -845,7 +931,7 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                       cause.aktywna ? 'text-[#141D19]' : 'text-[#5F6E66]'
                     }`}
                   >
-                    {cause.domena}
+                    {CAUSE_CARD_TITLES[cause.domena] ?? cause.domena}
                   </h3>
                   <span className={`text-xs font-semibold ${severityStyle}`}>{severityLabel}</span>
                 </div>
@@ -919,7 +1005,7 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                         </div>
                       </div>
                       <span className="text-xs font-semibold text-[#1B5E4A] inline-flex items-center gap-1 shrink-0 mt-1 group-hover:underline">
-                        Rady
+                        Zobacz szczegóły
                         <ArrowDown className="w-3.5 h-3.5" />
                       </span>
                     </a>
@@ -972,6 +1058,12 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
               Konkretne podpowiedzi wynikające z powyższej diagnozy przyczyn: najpierw retencja
               krajobrazowa, potem agrotechnika glebowa, na końcu ocena nawadniania.
             </p>
+            {odrName && (
+              <p className="text-xs sm:text-sm text-[#24322B] pt-1">
+                <strong className="font-semibold text-[#1B5E4A]">Doradztwo:</strong> {odrName} —
+                doradcy pomogą dobrać zabiegi do gospodarstwa i przygotować wnioski o ekoschematy.
+              </p>
+            )}
           </div>
 
           {/* 4.3 CO MOŻESZ DODAĆ NA DZIAŁCE: RETENCJA KRAJOBRAZOWA I MELIORACJA */}
@@ -1029,6 +1121,14 @@ export function ReportPage({ queryString, onGoHome }: ReportPageProps) {
                   ? ' W środku działki widać lokalne zagłębienie terenu, w którym może zbierać się woda.'
                   : ' Teren działki nie ma głębokich zagłębień bezodpływowych.'}
               </p>
+              {inputs.downslope?.status === 'ok' && (
+                <p className="text-xs sm:text-sm text-[#24322B] bg-[#F0F7F3] border border-[#B7D7C4] rounded-lg px-3.5 py-2.5 leading-relaxed">
+                  <strong className="font-semibold text-[#1B5E4A]">Gdzie zatrzymać wodę: </strong>
+                  {inputs.downslope.value
+                    ? `${capitalize(inputs.downslope.displayValue)}. Najniższy skraj pola od tej strony to naturalne miejsce na pas trawy lub zadrzewień, płytkie zagłębienie retencyjne albo zastawkę na rowie — tam woda zbiera się i odpływa najszybciej.`
+                    : `${capitalize(inputs.downslope.displayValue)}. Woda raczej wsiąka lub stoi na miejscu, więc ważniejsze od barier na skraju pola są struktura gleby i okrywa, które pozwalają jej wsiąkać.`}
+                </p>
+              )}
             </div>
           </section>
 

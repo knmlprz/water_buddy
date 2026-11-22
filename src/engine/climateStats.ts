@@ -680,3 +680,28 @@ export function computeSlopeAndDepression(params: {
     hasDepression
   };
 }
+
+export interface DownslopeEstimate {
+  directionPl: string | null; // null = teren praktycznie płaski (brak wyraźnego kierunku spływu)
+  dropPct: number;
+}
+
+/**
+ * Direction of steepest descent around the parcel centre from sparse NMT samples:
+ * the neighbour with the largest elevation drop per metre. Below 0.5% the terrain is
+ * treated as flat (water mostly infiltrates or ponds instead of running off one side).
+ */
+export function computeDownslopeDirection(
+  centerElevM: number,
+  neighbours: Array<{ elevM: number | null; directionPl: string; distanceM: number }>
+): DownslopeEstimate | null {
+  let best: { directionPl: string; dropPct: number } | null = null;
+  for (const n of neighbours) {
+    if (n.elevM === null) continue;
+    const dropPct = ((centerElevM - n.elevM) / n.distanceM) * 100;
+    if (!best || dropPct > best.dropPct) best = { directionPl: n.directionPl, dropPct };
+  }
+  if (!best) return null;
+  const dropPct = Number(best.dropPct.toFixed(1));
+  return dropPct < 0.5 ? { directionPl: null, dropPct } : { directionPl: best.directionPl, dropPct };
+}

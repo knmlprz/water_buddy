@@ -384,3 +384,52 @@ test('Soil cover guessed from the calendar does not add risk', () => {
   const observed = runWaterDiagnosis({ ...calm, hasSoilCover: false, soilCoverEstimated: false });
   assert.ok(guessed.waterManagement.score < observed.waterManagement.score);
 });
+
+test('NDVI is judged against the crop and month, not a single global threshold', async () => {
+  const { assessNdviForCrop } = await import('../data/cropNdviProfiles');
+  // 0.55 in July: weak for sugar beet (typical ~0.80), fine for ripening winter wheat (~0.40)
+  const beet = assessNdviForCrop({ cropId: 'burak_cukrowy', cropNamePl: 'Burak cukrowy', sceneDate: '2025-07-20', ndvi: 0.45, inHarvestWindow: false });
+  const wheat = assessNdviForCrop({ cropId: 'pszenica_ozima', cropNamePl: 'Pszenica ozima', sceneDate: '2025-07-05', ndvi: 0.45, inHarvestWindow: false });
+  const harvest = assessNdviForCrop({ cropId: 'pszenica_ozima', cropNamePl: 'Pszenica ozima', sceneDate: '2025-07-25', ndvi: 0.2, inHarvestWindow: true });
+  assert.equal(beet.status, 'wyraznie_ponizej');
+  assert.equal(wheat.status, 'typowa');
+  assert.equal(harvest.status, 'nie_oceniamy');
+});
+
+test('Stable case C does not recommend a ditch dam or crop-stress measures', () => {
+  const result = runWaterDiagnosis({
+    ...baseInput,
+    analysisDate: '2025-07-31',
+    cropId: 'burak_cukrowy',
+    soilId: 'pyl_zwykly',
+    slopePct: 1.7,
+    hasSoilCover: true,
+    hasDepression: false,
+    ditchDistanceM: 200,
+    kbwMm: -54,
+    spi1: 0.3,
+    spi3: 0.42,
+    sma: 2.12,
+    ndvi: 0.8,
+    ndviAnomaly: null,
+    satelliteAgeDays: 0,
+    depletionFraction: 0.52,
+    dryYearsLast10: 0,
+    iungDrought: false,
+    iungKbwMm: -57,
+    iungThresholdMm: -266,
+    iungPeriodLabel: '1.VI–31.VII',
+    iungCategory: 'IV'
+  });
+  const ids = [...result.landscapeRetention, ...result.agrotechnics].map((r) => r.id);
+  assert.ok(!ids.includes('R05_ROW_MELIORACYJNY_ZASTAWKA'), ids.join(','));
+  assert.ok(!ids.includes('R12_UPRAWA_OKNO_KRYTYCZNE_OCHRONA'), ids.join(','));
+  assert.equal(result.ndviCropAssessment.status, 'typowa');
+});
+
+test('ODR lookup by voivodeship name from ULDK', async () => {
+  const { findOdrForVoivodeship } = await import('../data/supportPrograms');
+  assert.equal(findOdrForVoivodeship('lubelskie'), 'Lubelski ODR w Końskowoli');
+  assert.equal(findOdrForVoivodeship('Kujawsko-Pomorskie'), 'Kujawsko-Pomorski ODR w Minikowie');
+  assert.equal(findOdrForVoivodeship(''), null);
+});

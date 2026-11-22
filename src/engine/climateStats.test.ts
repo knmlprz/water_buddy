@@ -156,3 +156,16 @@ test('FAO-56 bucket with Ks does not empty a deep loess profile to 100% in one d
   const depletion = computeFao56DailyDepletion(records, crop, loess, '2025-07-10');
   assert.ok(depletion < 0.95, `Expected depletion < 95% with Ks, got ${depletion}`);
 });
+
+test('computeDownslopeDirection finds the steepest descent and treats gentle terrain as flat', async () => {
+  const { computeDownslopeDirection } = await import('./climateStats');
+  const sloped = computeDownslopeDirection(200, [
+    { elevM: 200.2, directionPl: 'północ', distanceM: 35 },
+    { elevM: 198.6, directionPl: 'południe', distanceM: 35 },
+    { elevM: 199.9, directionPl: 'wschód', distanceM: 35 }
+  ]);
+  assert.equal(sloped?.directionPl, 'południe');
+  assert.equal(sloped?.dropPct, 4);
+  const flat = computeDownslopeDirection(200, [{ elevM: 199.9, directionPl: 'zachód', distanceM: 35 }]);
+  assert.equal(flat?.directionPl, null);
+});

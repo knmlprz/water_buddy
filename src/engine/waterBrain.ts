@@ -9,6 +9,7 @@ import {
 } from '../data/thresholds';
 import { RECOMMENDATION_RULES, type RecommendationRule } from '../data/rules';
 import { LIMITATIONS_DATA, type LimitationSentence } from '../data/limitations';
+import { assessNdviForCrop, type NdviCropAssessment } from '../data/cropNdviProfiles';
 
 export type LandUseType = 'arable' | 'forest' | 'urban' | 'water';
 
@@ -94,6 +95,7 @@ export interface ParcelDiagnosisResult {
   meteoAvailable: boolean;
   waterManagement: WaterManagementAssessment;
   ndviClass: NdviClass | null;
+  ndviCropAssessment: NdviCropAssessment;
   inCriticalWindow: boolean;
   inHarvestWindow: boolean;
   harvestFalseAlarmGuarded: boolean;
@@ -106,6 +108,14 @@ export interface ParcelDiagnosisResult {
   irrigationRules: RecommendationRule[];
   irrigationCalc: IrrigationCalculation;
   limitations: LimitationSentence[];
+}
+
+// BDOT10k sprawdzamy w dwóch promieniach (ok. 250 m i 500 m), więc znamy tylko przedział,
+// nie dokładną odległość do rowu
+export function describeDitchRadius(distanceM: number): string {
+  if (distanceM <= 250) return 'w promieniu ok. 250 m od działki';
+  if (distanceM <= 500) return 'w promieniu ok. 500 m od działki';
+  return 'dalej niż 500 m od działki';
 }
 
 export function isDateInMmDdWindow(isoDate: string, startMmDd: string, endMmDd: string): boolean {
@@ -284,6 +294,22 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
 
   const ndviClass = satelliteAvailable ? classifyNdvi(input.ndvi) : null;
 
+  // Interpretacja NDVI względem typowej zieleni tej uprawy w miesiącu zdjęcia (wymóg KOWR:
+  // interpretacja satelitarna ma uwzględniać rodzaj uprawy)
+  const sceneDate =
+    input.satelliteAgeDays !== null
+      ? new Date(Date.parse(`${input.analysisDate}T00:00:00Z`) - input.satelliteAgeDays * 86400000)
+          .toISOString()
+          .slice(0, 10)
+      : null;
+  const ndviCropAssessment = assessNdviForCrop({
+    cropId: crop.id,
+    cropNamePl: crop.nazwa_pl,
+    sceneDate,
+    ndvi: input.ndvi,
+    inHarvestWindow
+  });
+
   // Czy data analizy jest historyczna względem dzisiejszego roku (2026)
   const analysisYear = Number(input.analysisDate.slice(0, 4));
   const isHistoricalDate = Number.isFinite(analysisYear) && analysisYear < 2026;
@@ -352,11 +378,9 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
         nasilenie: weatherHigh ? 'Wysokie' : weatherMod ? 'Umiarkowane' : 'Brak',
         dowod: hasExcessWaterRisk
           ? `Przewaga opadów (KBW +${input.kbwMm} mm) przy glebie zwięzłej lub zagłębieniu (ryzyko zastoin), a w ${input.dryYearsLast10}/10 ostatnich lat w sezonie było sucho.`
-          : `KBW 60 dni = ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm, SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.${
-              iungAssessed
-                ? ` Próg suszy rolniczej IUNG (okres ${input.iungPeriodLabel}, gleba kat. ${input.iungCategory}): ${input.iungThresholdMm} mm — ${input.iungDrought ? `PRZEKROCZONY (KBW okresu ${input.iungKbwMm} mm)` : `nieprzekroczony (KBW okresu ${input.iungKbwMm} mm)`}.`
-                : ''
-            }`,
+          : iungAssessed
+            ? `Bilans KBW w okresie ${input.iungPeriodLabel}: ${input.iungKbwMm} mm przy progu suszy ${input.iungThresholdMm} mm dla gleby kat. ${input.iungCategory} — próg ${input.iungDrought ? 'PRZEKROCZONY' : 'nieprzekroczony'}. SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.`
+            : `KBW 60 dni = ${input.kbwMm > 0 ? `+${input.kbwMm}` : input.kbwMm} mm, SPI-3 = ${input.spi3.toFixed(1)}, suche sezony w 10-leciu: ${input.dryYearsLast10}/10.`,
         zrodlo: iungAssessed
           ? 'Open-Meteo Archive (ERA5 / FAO ET0), progi KBW IUNG-PIB SMSR (Rozp. MRiRW 2019)'
           : 'Open-Meteo Archive (ERA5 / FAO ET0), CDR 2025 s. 66, POLSA tab. 6.4'
@@ -391,7 +415,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
       domena: 'Spływ powierzchniowy',
       aktywna: runoffHigh || runoffMod,
       nasilenie: runoffHigh ? 'Wysokie' : runoffMod ? 'Umiarkowane' : 'Brak',
-      dowod: `${input.slopeAvailable === false ? 'Spadek terenu: brak odczytu NMT' : `Spadek terenu ${input.slopePct.toFixed(1)}%`}, okrywa gleby: ${!soilCoverKnown ? 'nieznana (brak świeżego zdjęcia satelitarnego)' : input.hasSoilCover ? 'obecna' : 'brak okrywy (ryzyko spływu i erozji)'}, ${input.ditchDistanceM <= 500 ? `rów/ciek w odległości ok. ${input.ditchDistanceM} m (może przyspieszać odpływ)` : 'brak rowu w promieniu 500 m'}.`,
+      dowod: `${input.slopeAvailable === false ? 'Spadek terenu: brak odczytu NMT' : `Spadek terenu ${input.slopePct.toFixed(1)}%`}, okrywa gleby: ${!soilCoverKnown ? 'nieznana (brak świeżego zdjęcia satelitarnego)' : input.hasSoilCover ? 'obecna' : 'brak okrywy (ryzyko spływu i erozji)'}, ${input.ditchDistanceM <= 500 ? `rów/ciek ${describeDitchRadius(input.ditchDistanceM)} (może przyspieszać odpływ)` : 'brak rowu w promieniu 500 m'}.`,
       zrodlo: 'GUGiK NMT 1 m, BDOT10k, CDR 2025 s. 99–106'
     },
     {
@@ -422,12 +446,22 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     matchedIds.add('R16_CHMURY_BRAK_SATELITY');
   }
 
+  // Sygnał deficytu dla reguł: gdy progi IUNG obejmują uprawę i glebę, rozstrzyga przekroczenie
+  // progu albo wyraźna anomalia opadów; inaczej (poza sezonem, lucerna) — ogólne progi KBW/SPI.
+  const deficitSignal =
+    input.iungDrought === true ||
+    (input.iungDrought === false
+      ? input.spi3 < -1.0
+      : input.kbwMm < -50 || input.spi3 < -1.0);
+  const verdictEdoForRules: EdoLadderLevel['poziom'] =
+    input.iungDrought === false ? 'brak' : edoLevel.poziom;
+
   // Rekomendacje polowe tylko dla gruntów ornych!
   if (input.landUse === 'arable') {
-    if (input.slopePct > 4 && bareSoil && input.kbwMm < -50) {
+    if (input.slopePct > 4 && bareSoil && deficitSignal) {
       matchedIds.add('R04_STOK_BEZ_OKRYWY_KBW');
     }
-    if (input.ditchDistanceM <= 500 && (input.kbwMm < -50 || input.spi3 < -1.0) && !input.isNatura2000) {
+    if (input.ditchDistanceM <= 500 && deficitSignal && !input.isNatura2000) {
       matchedIds.add('R05_ROW_MELIORACYJNY_ZASTAWKA');
     } else if (
       input.ditchDistanceM <= 500 &&
@@ -444,22 +478,22 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
       matchedIds.add('R18_ZASTOINY_NADMIAR_WODY');
     }
     if (
-      (input.dryYearsLast10 >= 5 && (input.kbwMm < -80 || input.spi3 < -1.0)) ||
+      (input.dryYearsLast10 >= 5 && deficitSignal) ||
       (input.dryYearsLast10 >= 5 && seasonPhase === 'odbudowa_jesien_zima')
     ) {
       matchedIds.add('R07_ZADRZEWIENIA_WIATROCHRONNE');
     }
-    if (soil.woda_dostepna_50cm_mm <= 70 && input.kbwMm < -50) {
+    if (soil.woda_dostepna_50cm_mm <= 70 && deficitSignal) {
       matchedIds.add('R08_GLEBA_LEKKA_MATERIA_ORGANICZNA');
     } else if (soil.woda_dostepna_50cm_mm <= 70 || input.dryYearsLast10 >= 4) {
       matchedIds.add('R20_RETENCJA_PROCHNICA_WIELOLETNIA');
     }
-    if (bareSoil && (input.kbwMm < -50 || input.spi3 < -1.0)) {
+    if (bareSoil && deficitSignal) {
       matchedIds.add('R09_MULCZ_RESZTKI_POZNIWNE');
     } else if (bareSoil) {
       matchedIds.add('R19_OKRYWA_ZIMOWA_ODBUDOWA');
     }
-    if (edoLevel.poziom !== 'brak' || input.kbwMm < -70) {
+    if (verdictEdoForRules !== 'brak' || deficitSignal) {
       matchedIds.add('R10_UPRAWA_KONSERWUJACA_BEZ_ORKI');
     }
     if (
@@ -468,7 +502,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     ) {
       matchedIds.add('R11_GLEBOSZOWANIE_GLEBA_CIEZKA');
     }
-    if (inCriticalWindow && (input.kbwMm < -50 || edoLevel.poziom !== 'brak')) {
+    if (inCriticalWindow && deficitSignal) {
       matchedIds.add('R12_UPRAWA_OKNO_KRYTYCZNE_OCHRONA');
     }
     if (
@@ -591,12 +625,18 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
       keyRisksPl.push('Brak okrywy roślinnej lub mulczu — odkryta gleba słabiej przyjmuje opad i szybciej wysycha.');
     }
 
+    // Tylko świeże zdjęcie (<= 14 dni) — starsze nie opisuje bieżącego stanu łanu
+    if (satelliteAvailable && ndviCropAssessment.status === 'wyraznie_ponizej') {
+      riskScore += 10;
+      keyRisksPl.push(ndviCropAssessment.textPl);
+    }
+
     if (input.ditchDistanceM <= 250) {
       riskScore += 14;
-      keyRisksPl.push(`W odległości ok. ${input.ditchDistanceM} m biegnie rów/ciek, który bez piętrzenia może zbyt szybko odwadniać pole.`);
+      keyRisksPl.push(`Rów lub ciek ${describeDitchRadius(input.ditchDistanceM)} (BDOT10k) — bez piętrzenia może zbyt szybko odwadniać pole.`);
     } else if (input.ditchDistanceM <= 500) {
       riskScore += 8;
-      keyRisksPl.push(`W promieniu ${input.ditchDistanceM} m znajduje się sieć rowów/cieków — warto kontrolować tempo odpływu wody.`);
+      keyRisksPl.push(`Sieć rowów/cieków ${describeDitchRadius(input.ditchDistanceM)} (BDOT10k) — warto kontrolować tempo odpływu wody.`);
     }
 
     if (hasExcessWaterRisk) {
@@ -702,6 +742,7 @@ export function runWaterDiagnosis(input: ParcelDiagnosisInput): ParcelDiagnosisR
     meteoAvailable,
     waterManagement,
     ndviClass,
+    ndviCropAssessment,
     inCriticalWindow,
     inHarvestWindow,
     harvestFalseAlarmGuarded,

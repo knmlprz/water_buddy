@@ -24,7 +24,7 @@ export function TopHeader({ activeRoute, onNavigate }: TopHeaderProps) {
           }}
           className="font-display text-lg font-bold tracking-tight text-[#141D19] whitespace-nowrap shrink-0 hover:text-[#1B5E4A] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1B5E4A]"
         >
-          WodaPol
+          Water Buddy
         </a>
 
         {/* Zone 2: Clean single-line navigation links */}

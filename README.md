@@ -283,6 +283,8 @@ Każdy raport zawiera dynamiczną sekcję „O czym warto pamiętać (ograniczen
 
 ## 9. Sposób weryfikacji wyników
 
+**Walidacja z IUNG SMSR (3 działki referencyjne, wszystkie zgodne):** [docs/WALIDACJA_SKROT.md](docs/WALIDACJA_SKROT.md) — jedna tabela; szczegóły w [docs/WALIDACJA_IUNG.md](docs/WALIDACJA_IUNG.md).
+
 **Walidacja z oficjalnym systemem IUNG-PIB SMSR** — szczegóły w [`docs/WALIDACJA_IUNG.md`](docs/WALIDACJA_IUNG.md):
 
 | Przypadek | Działka · uprawa · data | IUNG SMSR (referencja) | Water Buddy |

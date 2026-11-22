@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -102,6 +103,42 @@ function setCached<T>(map: Map<string, CacheEntry<T>>, key: string, value: T, tt
   map.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
+// Disk cache for data that practically never changes (parcel outline, terrain, soil, ditches).
+// Every reanalysis of a known parcel then skips ~11 GUGiK requests, which throttles per IP.
+const DISK_CACHE_ROOT =
+  process.env.CACHE_DIR ??
+  (process.env.VERCEL
+    ? path.join(os.tmpdir(), 'wodapol-cache')
+    : path.resolve(process.cwd(), '.cache'));
+const STATIC_DISK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function diskCachePath(bucket: string, key: string): string {
+  const safe = createHash('sha1').update(key).digest('hex');
+  return path.join(DISK_CACHE_ROOT, bucket, `${safe}.json`);
+}
+
+async function diskCacheGet<T>(bucket: string, key: string): Promise<T | null> {
+  try {
+    const raw = JSON.parse(await fs.readFile(diskCachePath(bucket, key), 'utf-8')) as {
+      savedAt: number;
+      value: T;
+    };
+    return Date.now() - raw.savedAt < STATIC_DISK_TTL_MS ? raw.value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function diskCachePut<T>(bucket: string, key: string, value: T): Promise<void> {
+  try {
+    const file = diskCachePath(bucket, key);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify({ savedAt: Date.now(), value }));
+  } catch {
+    // Read-only filesystem — the in-memory cache still works
+  }
+}
+
 export function getTodayPolandIso(): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Warsaw',
@@ -179,6 +216,11 @@ export async function lookupParcel(params: {
     : `xy:${params.lat?.toFixed(5)},${params.lon?.toFixed(5)}`;
   const cached = getCached(parcelGeomCache, cacheKey);
   if (cached) return cached;
+  const onDisk = await diskCacheGet<ParcelGeometryInfo>('parcels', cacheKey);
+  if (onDisk) {
+    setCached(parcelGeomCache, cacheKey, onDisk, 60 * 60 * 1000);
+    return onDisk;
+  }
 
   let url: string;
   if (params.id) {
@@ -192,11 +234,17 @@ export async function lookupParcel(params: {
   const uldkUnavailableMsg =
     'Serwer GUGiK (ULDK) chwilowo nie odpowiada poprawnie. Spróbuj ponownie za kilka minut.';
 
+  // GUGiK throttling is often momentary — one retry after a short pause, then give up
   let record: UldkParcelRecord | null;
   try {
     record = await fetchUldkParcel(url, { timeoutMs: 7500, userAgent: USER_AGENT });
   } catch {
-    throw new ParcelLookupError('TIMEOUT', uldkUnavailableMsg);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      record = await fetchUldkParcel(url, { timeoutMs: 6000, userAgent: USER_AGENT });
+    } catch {
+      throw new ParcelLookupError('TIMEOUT', uldkUnavailableMsg);
+    }
   }
 
   if (!record) {
@@ -233,6 +281,8 @@ export async function lookupParcel(params: {
 
   setCached(parcelGeomCache, cacheKey, info, 60 * 60 * 1000);
   if (id) setCached(parcelGeomCache, `id:${id}`, info, 60 * 60 * 1000);
+  await diskCachePut('parcels', cacheKey, info);
+  if (id && cacheKey !== `id:${id}`) await diskCachePut('parcels', `id:${id}`, info);
   return info;
 }
 
@@ -1390,7 +1440,9 @@ export async function runFullParcelAnalysis(
   const uldkMs = Date.now() - uldkStart;
 
   const [lat, lon] = parcel.centroid;
-  const cachedStatic = getCached(staticParcelCache, parcel.id);
+  const cachedStatic =
+    getCached(staticParcelCache, parcel.id) ??
+    (await diskCacheGet<StaticParcelBundle>('static', parcel.id));
 
   // Mark all parallel branches as running
   emit('meteo', 'Pogoda z 10 lat', 'Open-Meteo ERA5', 'running');
@@ -1500,12 +1552,12 @@ export async function runFullParcelAnalysis(
       : hydroRaw;
 
   if (!cachedStatic) {
-    setCached(
-      staticParcelCache,
-      parcel.id,
-      { terrain, soilAndProtected: soilProtected, hydroAndLandUse },
-      30 * 60 * 1000
-    );
+    const bundle: StaticParcelBundle = { terrain, soilAndProtected: soilProtected, hydroAndLandUse };
+    setCached(staticParcelCache, parcel.id, bundle, 30 * 60 * 1000);
+    // On disk only complete reads — a failed NMT/soil request should be retried next time
+    if (terrain.status === 'ok' && soilProtected.soilStatus === 'ok') {
+      await diskCachePut('static', parcel.id, bundle);
+    }
   }
 
   const soil =

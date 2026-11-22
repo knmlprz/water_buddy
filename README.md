@@ -4,6 +4,14 @@
 
 Water Buddy (roboczo: WodaPol) to aplikacja webowa dla rolników i doradców rolniczych, która na podstawie numeru działki ewidencyjnej (TERYT) lub kliknięcia na mapie Polski, wybranej uprawy oraz daty analizy (dziś lub dowolny dzień z ostatnich 10 lat) oblicza na żywo stan wody na konkretnej działce, diagnozuje przyczyny niedoboru lub odpływu wody i przedstawia konkretne rekomendacje w kolejności wymaganej przez KOWR: **stan wody → przyczyny → retencja krajobrazowa → agrotechnika glebowa → nawadnianie (opcjonalnie)**.
 
+> **Notka o przejrzystości — dane pogodowe w demo**
+>
+> Water Buddy pobiera pogodę na żywo z Open-Meteo (reanaliza ERA5 od 1991 r.). Darmowy plan Open-Meteo ma limit **10 000 wywołań dziennie na jeden adres IP**, a analiza nowej lokalizacji zużywa ok. 940 z nich. Podczas hackathonu limit był wyczerpywany nie przez nas, tylko przez **współdzielone adresy IP**: najpierw sieć Wi-Fi wydarzenia (wszyscy uczestnicy z jednego IP), potem serwery Vercela (IP dzielone z innymi projektami).
+>
+> Dlatego **film i raporty PDF dla działek A/B/C powstały na danych ERA5 pobranych z Open-Meteo wcześniej** (21.11.2026) i zapisanych w cache aplikacji. To te same, prawdziwe dane, które aplikacja pobiera na żywo — nic nie jest symulowane ani wpisane ręcznie. Te same komórki są wbudowane w wersję w chmurze (`src/data/meteoSeed/`), więc A/B/C działają tam niezależnie od limitu. Dla innych działek wersja w chmurze może pokazać komunikat o wyczerpanym limicie; raport mówi wtedy wprost „brak danych pogodowych”, zamiast zgadywać.
+>
+> **To ograniczenie infrastruktury, a nie metody.** Znika przy własnym serwerze z własnym IP i trwałym cache archiwum albo z komercyjnym kluczem Open-Meteo. Kod już obsługuje obie drogi (`METEO_CACHE_DIR`, `OPEN_METEO_API_KEY`). Szczegóły i koszty: [Open-Meteo w wersji demonstracyjnej — limit i koszty](#open-meteo-w-wersji-demonstracyjnej--limit-i-koszty).
+
 ---
 
 ## 1. Instrukcja uruchomienia

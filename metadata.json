@@ -1,8 +1,6 @@
 {
-  "name": "Remix WodaPol · Merytoryka i Dane KOWR",
-  "description": "Baza wiedzy agronomicznej (CDR 2025, FAO-56, POLSA, IUNG), silnik reguł rekomendacji wodnych oraz weryfikator otwartych API przestrzennych i meteo dla HackNation 2026.",
+  "name": "Water Buddy · HackNation 2026 KOWR",
+  "description": "Doradca gospodarki wodnej i retencji dla rolników: analiza działki na żywo (ULDK, ERA5, Sentinel-2, IUNG), susza rolnicza wg progów IUNG SMSR, rekomendacje w kolejności KOWR. Silnik deterministyczny, bez LLM.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": []
 }

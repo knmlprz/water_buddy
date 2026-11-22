@@ -2,6 +2,14 @@
 
 **HackNation 2026 · Wyzwanie KOWR**
 
+| | |
+|---|---|
+| **Działająca wersja** | https://water-buddy-omega.vercel.app (pierwsze otwarcie raportu do ~25 s) |
+| **Uruchomienie lokalne** | `npm install && npm run dev` → http://localhost:3000 ([instrukcja](#1-instrukcja-uruchomienia)) |
+| **Raporty wygenerowane przez prototyp** | [`testy/`](testy/) — PDF dla działek A (susza), B (anomalia bez suszy), C (stabilnie) |
+| **Walidacja z IUNG SMSR** | [3/3 zgodne — tabela](docs/WALIDACJA_SKROT.md) · [szczegóły](docs/WALIDACJA_IUNG.md) |
+| **Treść i regulamin zadania** | [`docs/`](docs/) |
+
 Water Buddy (roboczo: WodaPol) to aplikacja webowa dla rolników i doradców rolniczych, która na podstawie numeru działki ewidencyjnej (TERYT) lub kliknięcia na mapie Polski, wybranej uprawy oraz daty analizy (dziś lub dowolny dzień z ostatnich 10 lat) oblicza na żywo stan wody na konkretnej działce, diagnozuje przyczyny niedoboru lub odpływu wody i przedstawia konkretne rekomendacje w kolejności wymaganej przez KOWR: **stan wody → przyczyny → retencja krajobrazowa → agrotechnika glebowa → nawadnianie (opcjonalnie)**.
 
 > **Notka o przejrzystości — dane pogodowe w demo**
@@ -128,7 +136,7 @@ Przeglądarka (React 19 + Vite 8 + Tailwind CSS 4 + Leaflet)
  └── /metodyka             -> MethodologyPage (tabele z public/data/*, weryfikator API, symulator)
          │
          ▼ HTTP / SSE
-Serwer Express (server.ts / api/index.ts -> src/server/app.ts)
+Serwer Express (server.ts lokalnie / api/index.js na Vercelu, budowany z server/vercel-entry.ts -> src/server/app.ts)
  ├── GET /api/health
  ├── GET /api/reference-data      -> dane z public/data/*.json (wczytywane przez src/data/*.ts)
  ├── GET /api/parcel              -> ULDK GUGiK (GetParcelById / GetParcelByXY)
@@ -213,6 +221,9 @@ W katalogu `public/data/` znajdują się deterministyczne tabele agronomiczne i 
 | `limitations.json` / `limitations.csv` | 10 warunkowych i stałych zdań do sekcji „Ograniczenia” raportu | KOWR pkt 3.3, POLSA 2024, CDR 2025, Prawo wodne | `2026-11-21` |
 | `api_sources.json` / `api_sources.csv` / `README_ZRODLA_I_LICENCJE.md` | Specyfikacja, zweryfikowane zapytania i licencje 9 otwartych źródeł API | Ręczna i automatyczna weryfikacja HTTP/OGC | `2026-11-21` |
 | `src/data/iungThresholds.ts` | Progi KBW suszy rolniczej: gatunek × kategoria gleby I–IV × 14 okresów sześciodekadowych (zboża ozime/jare, kukurydza, rzepak, ziemniak, burak, strączkowe) | Rozp. MRiRW z 11.04.2019, tabela IUNG-PIB SMSR https://susza.iung.pulawy.pl/progi/ | pobrano `2026-11-21` |
+| `src/data/meteoSeed/*.json` | Dzienne szeregi ERA5 1991-01-01 → 2026-11-16 (opad, temperatura, ET0 FAO-56, wilgotność gleby) dla 4 komórek siatki 0,1° — w tym działek walidacyjnych A/B/C | Open-Meteo Archive API (ERA5 / ERA5-Land), CC BY 4.0 — **pobrane z API 21.11.2026**, bez żadnej obróbki | `2026-11-21` |
+
+Komórki `meteoSeed` to kopia tego samego cache, który aplikacja tworzy sama przy pierwszym zapytaniu; wynik i rekomendację nadal oblicza aplikacja na ich podstawie. Służą wyłącznie temu, żeby przypadki A/B/C działały przy wyczerpanym limicie Open-Meteo (zob. notka o przejrzystości na początku README). Dla każdej innej lokalizacji dane pogodowe są pobierane na żywo.
 
 Ocena „susza rolnicza TAK/NIE” w raporcie porównuje KBW z ERA5 (liczony na żywo dla punktu działki) z powyższym progiem dla wybranej uprawy i kategorii gleby IUNG — tak jak robi to SMSR na poziomie gminy. Drabina EDO (SPI/SMA/NDVI) jest pokazywana osobno jako anomalia względem normy i nie przesądza o suszy rolniczej. Bilans wody w glebie (FAO-56) uwzględnia współczynnik stresu Ks.
 
@@ -240,7 +251,14 @@ Ocena „susza rolnicza TAK/NIE” w raporcie porównuje KBW z ERA5 (liczony na 
 
 ### Użycie narzędzi AI
 - **W czasie działania aplikacji (runtime)**: **brak LLM w generowaniu diagnozy i rekomendacji**. Wszystkie wskaźniki, klasyfikacja EDO, diagnoza 4 przyczyn, dobór reguł KOWR oraz kalkulator nawadniania są w 100% deterministyczne i powtarzalne (zgodne z CDR 2025, FAO-56, POLSA 2024).
-- **W procesie tworzenia projektu**: narzędzia AI (Google AI Studio / Gemini) zostały wykorzystane jako wsparcie programistyczne (implementacja kodu TypeScript/React/Express, testów jednostkowych, stylów i grafik poglądowych sekcji przewodnika w `src/assets/images/`). Wszystkie wzory, progi liczbowe i zapytania API zostały zweryfikowane względem źródeł naukowych (CDR 2025, POLSA 2024, FAO-56) oraz żywych odpowiedzi serwerów.
+- **W procesie tworzenia projektu**: narzędzia AI zostały wykorzystane jako wsparcie programistyczne (implementacja kodu TypeScript/React/Express, testów jednostkowych, stylów i grafik poglądowych sekcji przewodnika w `src/assets/images/`). Wszystkie wzory, progi liczbowe i zapytania API zostały zweryfikowane względem źródeł naukowych (CDR 2025, POLSA 2024, FAO-56) oraz żywych odpowiedzi serwerów.
+
+| Narzędzie AI | Zakres użycia | Warunki korzystania |
+|---|---|---|
+| **Google AI Studio / Gemini** (Google) | szkielet aplikacji React/Express, część kodu i testów, grafiki poglądowe w `src/assets/images/` | [Gemini API Additional Terms of Service](https://ai.google.dev/gemini-api/terms) — Google nie rości sobie praw do wygenerowanych treści |
+| **Claude Code** (Anthropic, model Claude) | poprawki silnika (progi IUNG, bilans FAO-56 z Ks), walidacja z IUNG SMSR, wdrożenie (Vercel, esbuild), dokumentacja | [Anthropic Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms) — prawa do wygenerowanych wyników przysługują użytkownikowi |
+
+Żadne z tych narzędzi nie jest częścią działającej aplikacji ani nie przetwarza danych użytkownika. Kod wygenerowany z ich pomocą został przejrzany i przetestowany przez zespół.
 
 ---
 

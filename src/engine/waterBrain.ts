@@ -232,7 +232,7 @@ export function calculateIrrigationDose(
       : clampedDepletion < crop.dopuszczalne_wyczerpanie_p
         ? `Wyczerpanie zapasu wody (${Math.round(clampedDepletion * 100)}%) nie osiągnęło progu dopuszczalnego (${Math.round(crop.dopuszczalne_wyczerpanie_p * 100)}%).`
         : input.iungDrought === false
-          ? `Bilans wodny nie przekracza progu suszy rolniczej dla tej uprawy i gleby (KBW ${input.iungKbwMm} mm, próg ${input.iungThresholdMm} mm wg IUNG) — podlewanie nie jest uzasadnione.`
+          ? `Model zapasu wody w glebie pokazuje wyczerpanie ${Math.round(clampedDepletion * 100)}% (powyżej progu ${Math.round(crop.dopuszczalne_wyczerpanie_p * 100)}%), ale urzędowy bilans IUNG nie potwierdza suszy rolniczej: KBW ${input.iungKbwMm} mm wobec progu ${input.iungThresholdMm} mm dla tej uprawy${input.iungCategory ? ` na glebie kat. ${input.iungCategory}` : ''}. Rozstrzyga kryterium urzędowe (model gleby jest uproszczeniem), więc podlewanie nie jest teraz uzasadnione.`
           : 'Brak potwierdzonego deficytu w glebie (poziom EDO poniżej Ostrzeżenia oraz KBW >= −80 mm).';
 
     return {

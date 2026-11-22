@@ -5,6 +5,7 @@ import path from 'node:path';
 import proj4 from 'proj4';
 import { fromUrl } from 'geotiff';
 import { CROPS_DATA } from '../data/crops';
+import { METEO_SEED_CELLS } from '../data/meteoSeed/index';
 import { SOIL_WATER_GROUPS } from '../data/thresholds';
 import { runWaterDiagnosis, type LandUseType, type ParcelDiagnosisInput } from '../engine/waterBrain';
 import {
@@ -799,6 +800,7 @@ async function getArchiveCell(
   let cell = archiveCellMemory.get(cellKey) ?? null;
   if (!cell) {
     cell = await readArchiveCellFromDisk(cellKey);
+    if (!cell) cell = (METEO_SEED_CELLS[cellKey] as ArchiveCell | undefined) ?? null;
     if (cell) archiveCellMemory.set(cellKey, cell);
   }
   if (cell && isFresh(cell)) return { cell, error: null };

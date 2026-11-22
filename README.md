@@ -50,7 +50,24 @@ docker run -p 3000:3000 wodapol
 
 ### Wdrożenie w chmurze
 - **Render**: gotowa konfiguracja w `render.yaml` (`healthCheckPath: /api/health`).
-- **Vercel**: gotowa konfiguracja w `vercel.json` oraz funkcja bezserwerowa `api/index.ts`.
+- **Vercel**: gotowa konfiguracja w `vercel.json`; API jest pakowane esbuildem (`npm run build:api`) z `server/vercel-entry.ts` do jednej funkcji bezserwerowej `api/index.js` (region `fra1`).
+
+### Open-Meteo w wersji demonstracyjnej — limit i koszty
+Wersja w chmurze działa na darmowym planie Vercela. Zapytania do Open-Meteo wychodzą z **adresów IP Vercela, współdzielonych z innymi projektami**, a darmowy limit Open-Meteo (10 000 wywołań dziennie, niekomercyjnie) liczony jest **na adres IP**. Limit może więc zostać wyczerpany przez inne projekty, zanim Water Buddy wyśle pierwsze zapytanie — raport pokazuje wtedy „brak danych pogodowych” zamiast zgadywać. Jedna analiza nowej lokalizacji pobiera archiwum ERA5 od 1991 r., co Open-Meteo liczy jako ok. 940 wywołań (1 wywołanie = 2 tygodnie danych).
+
+Jak to ograniczamy w prototypie:
+- archiwum pobierane jest raz na komórkę siatki 0,1° i trzymane w pamięci oraz na dysku (`.cache/meteo`, na Vercelu `/tmp` — kasowane przy zimnym starcie funkcji),
+- dla działek walidacyjnych A/B/C komórki ERA5 są **wbudowane w aplikację** (`src/data/meteoSeed/`), więc te przypadki nie odpytują Open-Meteo wcale.
+
+Rozwiązanie produkcyjne (bez tego ograniczenia):
+| Wariant | Koszt | Uwagi |
+|---|---|---|
+| Własny serwer (VPS) z trwałym cache archiwum | koszt serwera | własne IP, archiwum danej okolicy pobierane raz |
+| Open-Meteo **API Professional** + `OPEN_METEO_API_KEY` | **€99 / mies.** | 5 mln wywołań/mies., licencja komercyjna, zawiera **Historical Weather API** (archiwum ERA5), którego używamy |
+| Open-Meteo API Standard | €29 / mies. | **niewystarczający** — 1 mln wywołań, ale bez Historical Weather API |
+| Własny mirror Copernicus CDS ERA5-Land / IMGW-PIB | bezpłatne dane, koszt przechowywania | brak limitów zapytań, najwięcej pracy wdrożeniowej |
+
+W prototypie nie używamy płatnego klucza — koszt 0 zł.
 
 ### Zmienne środowiskowe (`.env.example`)
 Wszystkie zmienne środowiskowe są opcjonalne — brak kluczy w kodzie źródłowym:
@@ -129,7 +146,7 @@ Serwer Express (server.ts / api/index.ts -> src/server/app.ts)
    - Już w prototypie zastosowano rozdzielny cache TTL: geometria działki (60 min), warstwy niezmienne w czasie — NMT 1 m, kategoria gleby IUNG, BDOT10k, Natura 2000 (30 min, bez daty w kluczu), serie meteo i Sentinel-2 (15 min po kluczu `(siatka/działka, data)`).
    - Przy skali ogólnopolskiej: warstwa Redis / PostgreSQL + PostGIS z klastrowaniem po siatce ~9 km dla ERA5 (ok. 4 000 oczek na całą Polskę) i po identyfikatorze TERYT dla warstw statycznych (TTL 30–90 dni).
 2. **Limity API i niezawodność**:
-   - Open-Meteo (darmowy plan niekomercyjny: `< 10 000 req/dzień`) przy skalowaniu komercyjnym/państwowym można zastąpić darmowym lokalnym magazynem danych **IMGW-PIB** (`danepubliczne.imgw.pl` — archiwa CSV + synop) i/lub reanalizą **Copernicus CDS ERA5-Land** (bezpłatna, własny mirror Zarr/NetCDF) albo planem komercyjnym Open-Meteo (od ~29 EUR/mies.).
+   - Open-Meteo (darmowy plan niekomercyjny: `< 10 000 req/dzień`) przy skalowaniu komercyjnym/państwowym można zastąpić darmowym lokalnym magazynem danych **IMGW-PIB** (`danepubliczne.imgw.pl` — archiwa CSV + synop) i/lub reanalizą **Copernicus CDS ERA5-Land** (bezpłatna, własny mirror Zarr/NetCDF) albo planem komercyjnym Open-Meteo (archiwum ERA5 wymaga planu **API Professional, €99/mies.**; plan Standard €29/mies. nie obejmuje Historical Weather API).
    - BDOT10k i MPHP (rowy/cieki) oraz granice Natura 2000 (GDOŚ) i mapa kategorii gleb IUNG najlepiej utrzymywać w lokalnej bazie **PostGIS** (paczki GPKG/SHP z GUGiK/GDOŚ/Wód Polskich, łącznie < 15 GB dla całej Polski) — skraca czas zapytań przestrzennych z ~1–3 s do `< 20 ms` i eliminuje zależność od chwilowych przeciążeń WMS.
    - Sentinel-2 COG (AWS Open Data / Earth Search) skaluje się bez limitu klucza dzięki odczytowi wyłącznie okna pikseli działki przez HTTP Range (`geotiff`).
 3. **Aktualizacja danych**:
@@ -251,7 +268,8 @@ Każdy raport zawiera dynamiczną sekcję „O czym warto pamiętać (ograniczen
 5. **Fenologia i zabiegi agrotechniczne**: kwitnienie rzepaku, pokosy lucerny lub żniwa zbóż obniżają NDVI niezależnie od suszy (wprowadzono strażnika okien zbioru `R03`, który blokuje fałszywy Alarm EDO).
 6. **Brak prognozy procentowej straty plonu**: celowo podajemy klasy ryzyka i przedziały fizyczne (mm), bez pozornej precyzji typu „−23,7% plonu”.
 7. **Warstwy statyczne dla dat historycznych**: granice EGiB (ULDK), BDOT10k (rowy) i Natura 2000 (GDOŚ) odzwierciedlają stan aktualny, co raport wprost zaznacza przy dacie historycznej (`LIM_03`).
-8. **Kwestie formalnoprawne**: budowa oczek, piętrzenie w rowach i pobór wody do nawadniania mogą wymagać zgłoszenia/pozwolenia wodnoprawnego lub uzgodnień z RDOŚ / spółką wodną (`LIM_08`, `LIM_09`).
+8. **Limit Open-Meteo na współdzielonym IP (wersja w chmurze)**: darmowy limit liczony per IP może być wyczerpany przez inne projekty na tym samym serwerze Vercela; działki A/B/C mają wbudowane dane ERA5, dla innych możliwy jest komunikat o limicie (szczegóły i koszty: „Open-Meteo w wersji demonstracyjnej” w sekcji 1).
+9. **Kwestie formalnoprawne**: budowa oczek, piętrzenie w rowach i pobór wody do nawadniania mogą wymagać zgłoszenia/pozwolenia wodnoprawnego lub uzgodnień z RDOŚ / spółką wodną (`LIM_08`, `LIM_09`).
 
 ---
 

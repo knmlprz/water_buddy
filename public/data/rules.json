@@ -173,10 +173,10 @@
     "kolejnosc_kowr": 4,
     "kategoria_kowr": "Nawadnianie (opcjonalne)",
     "przyczyna": "Opad i upał",
-    "tytul": "Brak uzasadnienia dla nawadniania (zapas wody wystarczający lub poza oknem krytycznym)",
+    "tytul": "Brak uzasadnienia dla nawadniania (zapas wody wystarczający, poza oknem krytycznym lub brak suszy wg IUNG)",
     "warunek_czytelny": "(!w_oknie_krytycznym_uprawy LUB wyczerpanie_wody < dopuszczalne_p) ORAZ poziom_EDO != alarm",
     "warunek_kod": "(!inCriticalWindow || depletionFraction < crop.dopuszczalne_wyczerpanie_p) && edoLevel !== \"alarm\"",
-    "tekst_dla_rolnika": "Na wybraną datę dane nie wskazują pilnej potrzeby nawadniania (zapas wody w profilu nie przekroczył progu wyczerpania lub uprawa jest poza oknem krytycznym). Priorytetem pozostaje zatrzymywanie opadu w glebie i krajobrazie.",
+    "tekst_dla_rolnika": "Na wybraną datę dane nie wskazują pilnej potrzeby nawadniania: zapas wody w profilu nie przekroczył progu wyczerpania, uprawa jest poza oknem krytycznym albo urzędowy bilans IUNG nie potwierdza suszy rolniczej (szczegóły w uzasadnieniu powyżej). Priorytetem pozostaje zatrzymywanie opadu w glebie i krajobrazie.",
     "co_dodac_krotko": "Wstrzymanie nawadniania — priorytet dla retencji",
     "uzasadnienie_naukowe": "Zgodnie z wytycznymi KOWR nawadnianie jest narzędziem ostatecznym i opcjonalnym; nieuzasadnione deszczowanie zwiększa koszty i obciąża zasoby wód podziemnych.",
     "zrodlo": "KOWR Załącznik nr 1, CDR 2025 (s. 243–246)"

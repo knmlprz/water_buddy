@@ -257,6 +257,14 @@ Każdy raport zawiera dynamiczną sekcję „O czym warto pamiętać (ograniczen
 
 ## 9. Sposób weryfikacji wyników
 
+**Walidacja z oficjalnym systemem IUNG-PIB SMSR** — szczegóły w [`docs/WALIDACJA_IUNG.md`](docs/WALIDACJA_IUNG.md):
+
+| Przypadek | Działka · uprawa · data | IUNG SMSR (referencja) | Water Buddy |
+|---|---|---|---|
+| A — susza | `080503_5.0006.74/4` (Ośno Lubuskie) · jęczmień jary · 2025-06-30 | susza, 96% pow. gminy | susza rolnicza TAK (KBW −154 mm vs próg −142 mm) |
+| B — anomalia bez suszy | `040704_2.0004.70/11` (Inowrocław) · pszenica ozima · 2025-07-10 | brak suszy | susza NIE (−168 vs −251 mm), anomalia opadów osobno |
+| C — stan stabilny | `060404_2.0177.13/4` (Hrubieszów) · burak cukrowy · 2025-07-31 | 0% zagrożenia | „stabilna gospodarka wodna”, susza NIE |
+
 1. **Automatyczne testy jednostkowe silnika i spójności danych** (`node:test` + `tsx`):
    ```bash
    npx --yes tsx --test src/engine/waterBrain.test.ts src/engine/climateStats.test.ts src/server/uldk.test.ts

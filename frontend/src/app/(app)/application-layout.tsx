@@ -1,64 +1,30 @@
 'use client'
 
-import { Avatar } from '@/components/avatar'
-import { Badge } from '@/components/badge'
-import { Navbar, NavbarSection, NavbarSpacer } from '@/components/navbar'
-import {
-  Sidebar,
-  SidebarBody,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarItem,
-  SidebarLabel,
-  SidebarSection,
-} from '@/components/sidebar'
-import { SidebarLayout } from '@/components/sidebar-layout'
-import { MapIcon } from '@heroicons/react/20/solid'
+import NextLink from 'next/link'
 import { usePathname } from 'next/navigation'
 
 export function ApplicationLayout({ children }: { children: React.ReactNode }) {
-  let pathname = usePathname()
+  const pathname = usePathname()
+  const metodyka = pathname.startsWith('/metodyka')
 
   return (
-    <SidebarLayout
-      navbar={
-        <Navbar>
-          <NavbarSpacer />
-          <NavbarSection>
-            <span className="text-sm font-semibold text-zinc-950 dark:text-white">Woda na działce</span>
-          </NavbarSection>
-        </Navbar>
-      }
-      sidebar={
-        <Sidebar>
-          <SidebarHeader>
-            <SidebarItem href="/" current={pathname === '/'}>
-              <Avatar initials="WD" className="bg-emerald-600 text-white" alt="Woda na działce" />
-              <SidebarLabel>Woda na działce</SidebarLabel>
-            </SidebarItem>
-          </SidebarHeader>
-
-          <SidebarBody>
-            <SidebarSection>
-              <SidebarItem href="/" current={pathname === '/'}>
-                <MapIcon />
-                <SidebarLabel>Woda na działce</SidebarLabel>
-              </SidebarItem>
-            </SidebarSection>
-          </SidebarBody>
-
-          <SidebarFooter>
-            <div className="px-2">
-              <Badge color="emerald">Liczone po pobraniu</Badge>
-              <p className="mt-2 text-xs/5 text-zinc-500 dark:text-zinc-400">
-                Numer działki albo puknięcie w mapę. Wynik powstaje z danych ściągniętych w tej chwili.
-              </p>
-            </div>
-          </SidebarFooter>
-        </Sidebar>
-      }
-    >
-      {children}
-    </SidebarLayout>
+    <div className="min-h-screen">
+      <header className="border-b border-zinc-200 bg-white print:hidden dark:border-white/10 dark:bg-zinc-900">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
+          <NextLink href="/" className="text-sm font-semibold text-zinc-950 dark:text-white">
+            Woda na działce
+          </NextLink>
+          <nav className="flex gap-4 text-sm">
+            <NextLink href="/" className={pathname === '/' ? 'font-semibold' : 'text-zinc-600 dark:text-zinc-300'}>
+              Start
+            </NextLink>
+            <NextLink href="/metodyka" className={metodyka ? 'font-semibold' : 'text-zinc-600 dark:text-zinc-300'}>
+              Metodyka
+            </NextLink>
+          </nav>
+        </div>
+      </header>
+      <main className="mx-auto max-w-3xl px-4 py-6">{children}</main>
+    </div>
   )
 }

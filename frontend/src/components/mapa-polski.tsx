@@ -27,7 +27,7 @@ export function MapaPolski({
   onPick,
 }: {
   ring: Ring | null
-  onPick: (lon: number, lat: number) => void
+  onPick?: (lon: number, lat: number) => void
 }) {
   const box = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 640, h: 420 })
@@ -62,7 +62,7 @@ export function MapaPolski({
       const xx = ((x % n) + n) % n
       tiles.push({
         key: `${view.z}-${x}-${y}`,
-        href: `https://tile.openstreetmap.org/${view.z}/${xx}/${y}.png`,
+        href: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${view.z}/${y}/${xx}`,
         left: (x - left) * 256,
         top: (y - top) * 256,
       })
@@ -88,7 +88,7 @@ export function MapaPolski({
     <div className="relative">
       <div
         ref={box}
-        className="relative h-[420px] cursor-crosshair overflow-hidden rounded-lg bg-zinc-200 select-none"
+        className={`relative h-[420px] overflow-hidden rounded-lg bg-zinc-200 select-none ${onPick ? 'cursor-crosshair' : 'cursor-grab'}`}
         onPointerDown={(e) => {
           drag.current = { x: e.clientX, y: e.clientY, lon: view.lon, lat: view.lat }
           e.currentTarget.setPointerCapture(e.pointerId)
@@ -103,7 +103,7 @@ export function MapaPolski({
           const d = drag.current
           drag.current = null
           if (!d) return
-          if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return
+          if (!onPick || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return
           const rect = e.currentTarget.getBoundingClientRect()
           const px = e.clientX - rect.left
           const py = e.clientY - rect.top
@@ -123,7 +123,7 @@ export function MapaPolski({
         ))}
         {poly && (
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
-            <polygon points={poly} fill="rgba(5,150,105,0.35)" stroke="#047857" strokeWidth="2" />
+            <polygon points={poly} fill="rgba(255,255,255,0.12)" stroke="#ffffff" strokeWidth="2" />
           </svg>
         )}
       </div>
@@ -143,7 +143,7 @@ export function MapaPolski({
           −
         </button>
       </div>
-      <p className="mt-1 text-xs text-zinc-500">Polska jest na środku. Mapa: OpenStreetMap</p>
+      <p className="mt-1 text-xs text-zinc-500">Zdjęcie ziemi: Esri, Maxar, Earthstar Geographics</p>
     </div>
   )
 }

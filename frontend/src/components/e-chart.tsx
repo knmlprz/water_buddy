@@ -17,7 +17,7 @@ export function EChart({
 
   useEffect(() => {
     if (!el.current) return
-    chart.current = echarts.init(el.current, undefined, { renderer: 'canvas' })
+    chart.current = echarts.init(el.current, undefined, { renderer: 'svg' })
     const ro = new ResizeObserver(() => chart.current?.resize())
     ro.observe(el.current)
     return () => {

@@ -1,4 +1,4 @@
-import { zbudujRaport } from '@/lib/raport.mjs'
+import { zbudujRaport } from '@/lib/raport'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'

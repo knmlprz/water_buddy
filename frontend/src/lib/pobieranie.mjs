@@ -1,6 +1,3 @@
-import { opisz, policz, UPRAWY } from './bilans.mjs'
-import { pobierzDzialke } from './dzialka.mjs'
-
 const LATENT_MJ_NA_MM = 2.45
 
 function zCzasem(ms) {
@@ -55,7 +52,7 @@ function dniZNasa(json) {
   return dni.length ? dni : null
 }
 
-async function pobierzPogode(lat, lon, od, doo) {
+export async function pobierzPogode(lat, lon, od, doo) {
   const omUrl = new URL('https://archive-api.open-meteo.com/v1/archive')
   omUrl.searchParams.set('latitude', String(lat))
   omUrl.searchParams.set('longitude', String(lon))
@@ -103,7 +100,7 @@ function frakcja(mean) {
   return (mean / 10) * 0.01
 }
 
-async function pobierzGlebe(lat, lon) {
+export async function pobierzGlebe(lat, lon) {
   const url = new URL('https://rest.isric.org/soilgrids/v2.0/properties/query')
   url.searchParams.set('lon', String(lon))
   url.searchParams.set('lat', String(lat))
@@ -133,7 +130,7 @@ async function pobierzGlebe(lat, lon) {
   return { mm, brak: null }
 }
 
-async function pobierzSpadek(lat, lon) {
+export async function pobierzSpadek(lat, lon) {
   const punkty = [
     [lat, lon],
     [lat + 150 / 111320, lon],
@@ -163,7 +160,7 @@ function dzienPrzed(data, dni) {
   return t.toISOString().slice(0, 10)
 }
 
-async function pobierzZdjecie(lat, lon, data) {
+export async function pobierzZdjecie(lat, lon, data) {
   const res = await pobierzTekst('https://earth-search.aws.element84.com/v1/search', 4000, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -198,7 +195,7 @@ function metry(aLat, aLon, bLat, bLon) {
   return 2 * R * Math.asin(Math.sqrt(s))
 }
 
-async function pobierzCiek(lat, lon) {
+export async function pobierzCiek(lat, lon) {
   const zapytanie = `[out:json][timeout:4];way(around:3000,${lat},${lon})["waterway"];out center 5;`
   for (const host of ['https://overpass.kumi.systems/api/interpreter', 'https://overpass-api.de/api/interpreter']) {
     const res = await pobierzTekst(host, 4000, {
@@ -222,7 +219,7 @@ async function pobierzCiek(lat, lon) {
   return { metry: null, brak: 'Usługa wodna nie zdążyła. W tym raporcie nie ma rowów ani cieków.' }
 }
 
-function sprawdzDate(data) {
+export function sprawdzDate(data) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error('Podaj dzień analizy w formacie rok-miesiąc-dzień')
   const dzien = new Date(`${data}T00:00:00Z`)
   if (Number.isNaN(dzien.getTime())) throw new Error('Ten dzień analizy jest niepoprawny')
@@ -232,93 +229,4 @@ function sprawdzDate(data) {
   start.setUTCFullYear(start.getUTCFullYear() - 10)
   if (dzien > koniec || dzien < start) throw new Error('Dzień analizy ma być z ostatnich 10 lat, nie z przyszłości')
   return data
-}
-
-export async function zbudujRaport(body) {
-  const uprawa = String(body?.uprawa ?? '')
-  if (!UPRAWY.some((u) => u.id === uprawa)) throw new Error('Wybierz uprawę z listy')
-  const data = sprawdzDate(String(body?.data ?? ''))
-  const t = zCzasem(12000)
-  let dzialka
-  try {
-    dzialka = await pobierzDzialke({
-      id: body?.id ? String(body.id) : undefined,
-      lon: body?.lon,
-      lat: body?.lat,
-      signal: t.signal,
-    })
-  } finally {
-    t.koniec()
-  }
-
-  const od = `${Number(data.slice(0, 4)) - 9}-01-01`
-  const [pogoda, gleba, spadek, satelita, ciek] = await Promise.all([
-    pobierzPogode(dzialka.lat, dzialka.lon, od, data),
-    pobierzGlebe(dzialka.lat, dzialka.lon),
-    pobierzSpadek(dzialka.lat, dzialka.lon),
-    pobierzZdjecie(dzialka.lat, dzialka.lon, data),
-    pobierzCiek(dzialka.lat, dzialka.lon),
-  ])
-
-  const wynik = policz({ dni: pogoda.dni, uprawa, data, glebaMm: gleba.mm })
-  const zdania = opisz({
-    wynik,
-    uprawa,
-    data,
-    glebaMm: gleba.mm,
-    spadek: spadek.procent,
-    ciekM: ciek.metry,
-  })
-  const pobrano = new Date().toISOString()
-  const brak = [gleba.brak, spadek.brak, satelita.brak, ciek.brak].filter(Boolean)
-  const zrodla = [
-    { nazwa: 'Usługa lokalizacji działek', opis: 'obrys działki ewidencyjnej', kiedy: pobrano },
-    { nazwa: pogoda.zrodlo, opis: pogoda.opis, kiedy: pobrano },
-    {
-      nazwa: 'SoilGrids',
-      opis: gleba.mm == null ? 'brak pojemności wodnej dla tego punktu' : 'pojemność wodna w wierzchnich 30 cm',
-      kiedy: pobrano,
-    },
-    {
-      nazwa: 'Wysokość terenu',
-      opis: spadek.procent == null ? 'brak spadku' : 'pięć punktów wysokości co około 150 m',
-      kiedy: pobrano,
-    },
-  ]
-  if (satelita.zdjecie) zrodla.push({ nazwa: 'Sentinel-2', opis: 'podgląd sceny, nie wycinek samej działki', kiedy: pobrano })
-  if (ciek.metry != null) zrodla.push({ nazwa: 'Mapa cieków', opis: 'odległość do najbliższego cieku w promieniu 3 km', kiedy: pobrano })
-
-  const niepewnosc = [
-    'Liczba jest dla środka działki, nie dla każdego miejsca na polu.',
-    'Potrzeba uprawy pochodzi z ogólnej tabeli miesięcy, nie z pomiaru tej odmiany.',
-    'To nie zastępuje pomiaru wilgotności na polu ani doradcy.',
-  ]
-  if (pogoda.szacunek) niepewnosc.push('Parowanie jest szacunkiem z energii, nie pomiarem na tej działce.')
-  if (gleba.mm != null) niepewnosc.push('Gleba jest z siatki około 250 m, nie z odkrywki na polu.')
-  if (gleba.mm == null) niepewnosc.push('Bez gleby liczba pokazuje tylko deszcz kontra potrzebę uprawy.')
-
-  return {
-    dzialka: { id: dzialka.id, lon: dzialka.lon, lat: dzialka.lat, ring: dzialka.ring },
-    uprawa,
-    data,
-    niedobor_mm: wynik.niedobor_mm,
-    potrzeba_mm: wynik.potrzeba_mm,
-    opad_mm: wynik.opad_mm,
-    gleba_mm: gleba.mm,
-    spadek_procent: spadek.procent,
-    ciek_m: ciek.metry,
-    suche: wynik.suche,
-    lat: wynik.lat,
-    miesiecznie: wynik.miesiecznie,
-    zdania,
-    brak,
-    zrodla,
-    niepewnosc,
-    ograniczenia: [
-      'Bilans liczy się od 1 stycznia do wybranego dnia, dla jednej uprawy.',
-      'Rowy melioracyjne są w raporcie tylko wtedy, gdy usługa wodna zdąży je podać.',
-    ],
-    zdjecie: satelita.zdjecie,
-    pobrano,
-  }
 }

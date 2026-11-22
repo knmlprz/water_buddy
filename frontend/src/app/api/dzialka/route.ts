@@ -19,7 +19,12 @@ export async function GET(req: Request) {
     })
     return NextResponse.json(dzialka)
   } catch (e) {
-    const blad = e instanceof Error ? e.message : 'Nie udało się pobrać działki'
+    const przerwane = e instanceof Error && e.name === 'AbortError'
+    const blad = przerwane
+      ? 'Serwer GUGiK nie odpowiada, spróbuj ponownie.'
+      : e instanceof Error
+        ? e.message
+        : 'Nie udało się pobrać działki'
     return NextResponse.json({ blad }, { status: 404 })
   } finally {
     clearTimeout(timer)
